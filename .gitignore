@@ -1,2 +1,3 @@
 .swp
 .*.swp
+/kernel/build/

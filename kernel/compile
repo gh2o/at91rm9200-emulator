@@ -1,4 +1,5 @@
-#!/bin/sh
+#!/bin/sh -e
 cd "$(dirname "$0")"
 mkdir -p build
-exec make -C source O=build ARCH=arm CROSS_COMPILE=arm-none-eabi- "$@"
+ln -sf ../config build/.config
+exec make -C source O=$PWD/build ARCH=arm CROSS_COMPILE=arm-none-eabi- "$@"
