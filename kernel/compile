@@ -1,0 +1,4 @@
+#!/bin/sh
+cd "$(dirname "$0")"
+mkdir -p build
+exec make -C source O=build ARCH=arm CROSS_COMPILE=arm-none-eabi- "$@"
