@@ -310,6 +310,7 @@ public:
 				alu_out = Rn_value & shifter_operand;
 				break;
 			case 2:
+			case 10:
 				alu_out = Rn_value - shifter_operand;
 				break;
 			case 4:
@@ -331,10 +332,20 @@ public:
 				(alu_out & PSR_BITS_N) |
 				(alu_out == 0 ? PSR_BITS_Z : 0) |
 				(shifter_carry_out ? PSR_BITS_Z : 0);
+			bool a, b, r = alu_out & (1 << 31);
 			switch (opcode) {
 				case 8:
 				case 9:
 				case 13:
+					break;
+				case 2:
+				case 10:
+					a = Rn_value & (1 << 31);
+					b = shifter_operand & (1 << 31);
+					newCPSR =
+						(newCPSR & ~(PSR_BITS_C | PSR_BITS_V)) |
+						((a & !b) | (a & !r) | (!b & !r) ? PSR_BITS_C : 0) |
+						((!a & b & r) | (a & !b & !r) ? PSR_BITS_V : 0);
 					break;
 				default:
 					dumpAndAbort("data opcode %u S unimplemented", opcode);
