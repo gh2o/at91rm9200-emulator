@@ -735,7 +735,18 @@ private:
 							return 0x41039200;
 						default:
 							core.dumpAndAbort("CP15 unknown opcode_2");
+							break;
 					}
+					break;
+				case 1: // control registers
+					switch (opcode_2) {
+						case 0: // primary control register
+							return controlReg;
+						default:
+							core.dumpAndAbort("CP15 unknown opcode_2");
+							break;
+					}
+					break;
 				default:
 					core.dumpAndAbort("CP15 unknown register read %d", CRn);
 					break;
