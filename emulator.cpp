@@ -358,6 +358,8 @@ public:
 				break;
 		}
 		if (S) {
+			if (Rd == 15)
+				dumpAndAbort("Rd15 data and S not supported");
 			uint32_t newCPSR =
 				(readCPSR() & ~(PSR_BITS_N | PSR_BITS_Z | PSR_BITS_C)) |
 				(alu_out & PSR_BITS_N) |
