@@ -110,19 +110,21 @@ public:
 						}
 						break;
 					default: // data processing with immediate
-						uint32_t immed_8 = encodedInst & 0xFF;
-						uint32_t rotate_imm = (encodedInst >> 8) & 0x0F;
-						uint32_t shifter_operand = rotateRight(immed_8, rotate_imm * 2);
-						bool shifter_carry_out = (rotate_imm == 0) ?
-							readCPSR() & PSR_BITS_C : 
-							shifter_operand & (1 << 31);
-						inst_DATA(tickState,
-								dec2 >> 1, /* opcode */
-								dec2 & 0x01, /* S */
-								Rd,
-								Rn,
-								shifter_operand,
-								shifter_carry_out);
+						{
+							uint32_t immed_8 = encodedInst & 0xFF;
+							uint32_t rotate_imm = (encodedInst >> 8) & 0x0F;
+							uint32_t shifter_operand = rotateRight(immed_8, rotate_imm * 2);
+							bool shifter_carry_out = (rotate_imm == 0) ?
+								readCPSR() & PSR_BITS_C :
+								shifter_operand & (1 << 31);
+							inst_DATA(tickState,
+									dec2 >> 1, /* opcode */
+									dec2 & 0x01, /* S */
+									Rd,
+									Rn,
+									shifter_operand,
+									shifter_carry_out);
+						}
 						break;
 				}
 				break;
