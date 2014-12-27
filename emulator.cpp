@@ -17,17 +17,6 @@ static inline uint32_t rotateRight(uint32_t val, uint32_t count) {
 	return (val >> count) | (val << (32 - count));
 }
 
-__attribute__((noreturn, format(printf, 1, 2)))
-void abortWithMessage(const char *format, ...) {
-	fprintf(stderr, "Abort: ");
-	va_list args;
-	va_start(args, format);
-	vfprintf(stderr, format, args);
-	va_end(args);
-	fputc('\n', stderr);
-	abort();
-}
-
 class IMX233 {
 	struct TickState;
 public:
@@ -55,7 +44,10 @@ public:
 		TICK_ERROR_DATA_ABORT,
 	};
 public:
-	IMX233() : memoryController(*this) {
+	IMX233() :
+			registerFile(*this),
+			memoryController(*this),
+			systemControlCoprocessor(*this) {
 		reset();
 	}
 	void reset() {
@@ -67,7 +59,7 @@ public:
 		tickState.nextPC = getPC() + 4;
 		tickInternal(tickState);
 		if (tickState.tickError != TICK_ERROR_NONE)
-			abortWithMessage("tick error occurred");
+			dumpAndAbort("tick error occurred");
 		else
 			setPC(tickState.nextPC);
 	}
@@ -81,7 +73,7 @@ public:
 		}
 		// only execute if condition passes
 		if ((encodedInst >> 28) != 0x0E)
-			abortWithMessage("unknown condition");
+			dumpAndAbort("unknown condition");
 		bool condPass = true;
 		if (!condPass)
 			return;
@@ -89,32 +81,65 @@ public:
 		unsigned int dec1 = (encodedInst >> 25) & 0x07;
 		unsigned int dec2 = (encodedInst >> 20) & 0x1F;
 		unsigned int dec3 = (encodedInst >> 4) & 0x0F;
+		unsigned int Rn = (encodedInst >> 16) & 0x0F;
+		unsigned int Rd = (encodedInst >> 12) & 0x0F;
+		unsigned int Rs = (encodedInst >> 8) & 0x0F;
+		unsigned int Rm = (encodedInst >> 0) & 0x0F;
 		switch (dec1) {
 			case 1:
 				switch (dec2) {
 					case 18: // MSR CPSR, #immed
 					case 22: // MSR SPSR, #immed
-					{
-						uint32_t _8_bit_immediate = encodedInst & 0xFF;
-						uint32_t rotate_imm = (encodedInst >> 8) & 0x0F;
-						uint32_t operand = rotateRight(_8_bit_immediate, rotate_imm * 2);
-						inst_MSR(tickState,
-								encodedInst & (1 << 22), /* R */
-								(encodedInst >> 16) & 0x0F, /* field_mask */
-								operand);
+						{
+							uint32_t _8_bit_immediate = encodedInst & 0xFF;
+							uint32_t rotate_imm = (encodedInst >> 8) & 0x0F;
+							uint32_t operand = rotateRight(_8_bit_immediate, rotate_imm * 2);
+							inst_MSR(tickState,
+									encodedInst & (1 << 22), /* R */
+									(encodedInst >> 16) & 0x0F, /* field_mask */
+									operand);
+						}
 						break;
-					}
 					default:
-						abortWithMessage("decode 1.%d unknown", dec2);
+						dumpAndAbort("decode 1.%d unknown", dec2);
 				}
 				break;
 			case 7:
 				switch (dec2) {
+					case 1: case 3: case 5: case 7:
+					case 9: case 11: case 13: case 15: // MRC/CDP
+						if (dec3 & 0x01) {
+							// MRC
+							inst_MRC(tickState,
+									(encodedInst >> 8) & 0x0F, /* cp_num */
+									(encodedInst >> 21) & 0x07, /* opcode_1 */
+									Rd,
+									Rn,
+									Rm,
+									(encodedInst >> 5) & 0x07 /* opcode_2 */);
+						} else {
+							// CDP
+							dumpAndAbort("CDP unimplemented");
+						}
+						break;
 					default:
-						abortWithMessage("decode 7.%d unknown", dec2);
+						dumpAndAbort("decode 7.%d unknown", dec2);
 				}
+				break;
 			default:
-				abortWithMessage("decode %d unknown", dec1);
+				dumpAndAbort("decode %d unknown", dec1);
+		}
+	}
+	void inst_MRC(TickState& tickState, uint32_t cp_num, uint32_t opcode_1,
+			unsigned int Rd, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
+		if (cp_num != 15)
+			dumpAndAbort("access to coproc other than CP15");
+		uint32_t data = systemControlCoprocessor.read(opcode_1, CRn, CRm, opcode_2);
+		if (Rd == 15) {
+			uint32_t mask = 0x0F << 28;
+			writeCPSR((readCPSR() & ~mask) | (data & mask));
+		} else {
+			writeRegister(Rd, data);
 		}
 	}
 	void inst_MSR(TickState& tickState, bool R, uint32_t field_mask, uint32_t operand) {
@@ -124,11 +149,11 @@ public:
 			((field_mask & (1 << 2)) ? 0x00FF0000 : 0) |
 			((field_mask & (1 << 3)) ? 0xFF000000 : 0);
 		if (operand & 0x0FFFFF00)
-			abortWithMessage("MSR: attempted to set reserved bits");
+			dumpAndAbort("MSR: attempted to set reserved bits");
 		if (!R) {
 			if (isPrivileged()) {
 				if (operand & 0x00000020)
-					abortWithMessage("MSR: attempted to set non-ARM execution state");
+					dumpAndAbort("MSR: attempted to set non-ARM execution state");
 				mask &= 0xF0000000 | 0x0000000F;
 			} else {
 				mask &= 0xF0000000;
@@ -138,6 +163,24 @@ public:
 			mask &= 0xF0000000 | 0x0000000F | 0x00000020;
 			writeSPSR((readSPSR() & ~mask) | (operand & mask));
 		}
+	}
+	__attribute__((noreturn, format(printf, 2, 3)))
+	void dumpAndAbort(const char *format, ...) {
+		// print message line
+		fprintf(stderr, "Abort: ");
+		va_list args;
+		va_start(args, format);
+		vfprintf(stderr, format, args);
+		va_end(args);
+		fputc('\n', stderr);
+		// dump info
+		for (int i = 0; i < 15; i++)
+			fprintf(stderr, "r%d = %08x\n", i, readRegister(i));
+		uint32_t pc = getPC();
+		bool err;
+		fprintf(stderr, "pc = %08x (%08x)\n", pc, memoryController.readWord(pc, &err));
+		// goodbye
+		abort();
 	}
 	void allocateMemory(uint32_t size) {
 		systemMemory.reset(new uint32_t[size / 4 + 1]);
@@ -180,7 +223,7 @@ private:
 	};
 	class RegisterFile {
 	public:
-		RegisterFile() {
+		RegisterFile(IMX233& core) : core(core) {
 			registerView[15] = &programCounter;
 			for (int i = 0; i <= 7; i++)
 				registerView[i] = &(nonBanked[i]);
@@ -209,12 +252,12 @@ private:
 		}
 		uint32_t readSPSR() {
 			if (curSPSRView == &(storedSPSR[0]))
-				abortWithMessage("read from non-existent SPSR");
+				core.dumpAndAbort("read from non-existent SPSR");
 			return *curSPSRView;
 		}
 		void writeSPSR(uint32_t val) {
 			if (curSPSRView == &(storedSPSR[0]))
-				abortWithMessage("write to non-existent SPSR");
+				core.dumpAndAbort("write to non-existent SPSR");
 			*curSPSRView = val;
 		}
 		uint32_t readRegister(uint32_t reg) {
@@ -234,6 +277,7 @@ private:
 			programCounter = val;
 		}
 	private:
+		IMX233& core;
 		uint32_t curCPSR;
 		uint32_t storedSPSR[16];
 		uint32_t nonBanked[8];
@@ -255,12 +299,12 @@ private:
 		uint32_t readWordPhysical(uint32_t addr, bool *errorOccurred) {
 			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize)
 				return core.systemMemory[(addr - systemMemoryBase) / 4];
-			abortWithMessage("readWordPhysical");
+			core.dumpAndAbort("readWordPhysical");
 		}
 		void writeWordPhysical(uint32_t addr, uint32_t val, bool *errorOccurred) {
 			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize)
 				core.systemMemory[(addr - systemMemoryBase) / 4] = val;
-			abortWithMessage("writeWordPhysical");
+			core.dumpAndAbort("writeWordPhysical");
 		}
 	private:
 		IMX233& core;
@@ -268,6 +312,19 @@ private:
 	class SystemControlCoprocessor {
 	public:
 		SystemControlCoprocessor(IMX233& core) : core(core) {}
+		uint32_t read(unsigned int opcode_1, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
+			switch (CRn) {
+				case 0: // ID codes
+					switch (opcode_2) {
+						case 0: // Main ID register
+							return 0x41039200;
+						default:
+							core.dumpAndAbort("CP15 unknown opcode_2");
+					}
+				default:
+					core.dumpAndAbort("CP15 unknown register");
+			}
+		}
 	private:
 		IMX233& core;
 	};
@@ -276,6 +333,7 @@ private:
 	uint32_t systemMemorySize = 0;
 	RegisterFile registerFile;
 	MemoryController memoryController;
+	SystemControlCoprocessor systemControlCoprocessor;
 };
 
 std::vector<char> readFileToVector(const char *path) {
