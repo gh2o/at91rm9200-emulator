@@ -260,6 +260,22 @@ public:
 							dumpAndAbort("CDP unimplemented");
 						}
 						break;
+					case 0: case 2: case 4: case 6:
+					case 8: case 10: case 12: case 14: // MCR/CDP
+						if (dec3 & 0x01) {
+							// MCR
+							inst_MCR(
+									(encodedInst >> 8) & 0x0F, /* cp_num */
+									(encodedInst >> 21) & 0x07, /* opcode_1 */
+									Rd,
+									Rn,
+									Rm,
+									(encodedInst >> 5) & 0x07 /* opcode_2 */);
+						} else {
+							// CDP
+							dumpAndAbort("CDP unimplemented");
+						}
+						break;
 					default:
 						dumpAndAbort("decode 7.%d unknown", dec2);
 						break;
@@ -453,10 +469,21 @@ public:
 				st.address = Rn_value;
 		}
 	}
+	void inst_MCR(uint32_t cp_num, uint32_t opcode_1,
+			unsigned int Rd, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
+		if (cp_num != 15)
+			dumpAndAbort("access to coproc other than CP15");
+		if ((readCPSR() & PSR_BITS_MODE) == CPU_MODE_USER)
+			dumpAndAbort("MRC in non-privileged mode");
+		uint32_t data = readRegister(Rd);
+		systemControlCoprocessor.write(opcode_1, CRn, CRm, opcode_2, data);
+	}
 	void inst_MRC(uint32_t cp_num, uint32_t opcode_1,
 			unsigned int Rd, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
 		if (cp_num != 15)
 			dumpAndAbort("access to coproc other than CP15");
+		if ((readCPSR() & PSR_BITS_MODE) == CPU_MODE_USER)
+			dumpAndAbort("MRC in non-privileged mode");
 		uint32_t data = systemControlCoprocessor.read(opcode_1, CRn, CRm, opcode_2);
 		if (Rd == 15) {
 			uint32_t mask = 0x0F << 28;
@@ -693,7 +720,21 @@ private:
 							core.dumpAndAbort("CP15 unknown opcode_2");
 					}
 				default:
-					core.dumpAndAbort("CP15 unknown register");
+					core.dumpAndAbort("CP15 unknown register read %d", CRn);
+					break;
+			}
+		}
+		void write(unsigned int opcode_1, unsigned int CRn, unsigned int CRm, unsigned int opcode_2, uint32_t data) {
+			switch (CRn) {
+				case 7:
+					fprintf(stderr, "TODO: cache management (CRn=7)\n");
+					break;
+				case 8:
+					fprintf(stderr, "TODO: TLB management (CRn=8)\n");
+					break;
+				default:
+					core.dumpAndAbort("CP15 unknown register write %d", CRn);
+					break;
 			}
 		}
 	private:
