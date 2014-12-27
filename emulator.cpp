@@ -275,6 +275,7 @@ public:
 		uint32_t Rn_value = readRegister(Rn);
 		switch (opcode) {
 			case 0:
+			case 8:
 				alu_out = Rn_value & shifter_operand;
 				break;
 			case 2:
@@ -285,6 +286,9 @@ public:
 				break;
 			case 9:
 				alu_out = Rn_value ^ shifter_operand;
+				break;
+			case 13:
+				alu_out = shifter_operand;
 				break;
 			default:
 				dumpAndAbort("data opcode %u unimplemented", opcode);
@@ -297,7 +301,9 @@ public:
 				(alu_out == 0 ? PSR_BITS_Z : 0) |
 				(shifter_carry_out ? PSR_BITS_Z : 0);
 			switch (opcode) {
+				case 8:
 				case 9:
+				case 13:
 					break;
 				default:
 					dumpAndAbort("data opcode %u S unimplemented", opcode);
