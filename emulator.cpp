@@ -104,6 +104,46 @@ public:
 		unsigned int Rs = (encodedInst >> 8) & 0x0F;
 		unsigned int Rm = (encodedInst >> 0) & 0x0F;
 		switch (dec1) {
+			case 0:
+				switch (dec2) {
+					case 16:
+					case 20:
+					case 18:
+					case 22:
+						dumpAndAbort("decode 0.%d unknown", dec2);
+						break;
+					default:
+						if ((dec3 & 0x09) != 0x09) {
+							// data processing with register
+							uint32_t shift_type = (dec3 >> 1) & 0x03;
+							uint32_t shift_imm;
+							uint32_t shifter_operand = readRegister(Rm);
+							bool shifter_carry_out = readCPSR() & PSR_BITS_C;
+							if (dec3 & 0x01)
+								shift_imm = readRegister(Rs) & 0xFF;
+							else
+								shift_imm = (encodedInst >> 7) & 0x1F;
+							switch (shift_type) {
+								case 0: // LSL
+									if (shift_imm != 0)
+										dumpAndAbort("non-zero shift");
+									break;
+								default:
+									dumpAndAbort("unknown shift type %d", shift_type);
+							}
+							inst_DATA(
+									dec2 >> 1, /* opcode */
+									dec2 & 0x01, /* S */
+									Rd,
+									Rn,
+									shifter_operand,
+									shifter_carry_out);
+						} else {
+							dumpAndAbort("multiply or extra L/S unimplemented");
+						}
+						break;
+				}
+				break;
 			case 1:
 				switch (dec2) {
 					case 16:
