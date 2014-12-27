@@ -73,10 +73,15 @@ public:
 				tickPendingLDMSTM();
 				break;
 		}
-		if (currentTick.tickError != TICK_ERROR_NONE)
+		if (currentTick.tickError != TICK_ERROR_NONE) {
+			currentTick.pendingOperation = PENDING_OPERATION_NONE;
 			dumpAndAbort("tick error occurred");
-		if (currentTick.pendingOperation == PENDING_OPERATION_NONE)
+		}
+		if (currentTick.pendingOperation == PENDING_OPERATION_NONE) {
+			if (currentTick.nextPC & 0x03)
+				dumpAndAbort("nextPC not aligned");
 			setPC(currentTick.nextPC);
+		}
 	}
 	void tickExecute() {
 		bool errorOccurred = false;
@@ -183,7 +188,35 @@ public:
 		}
 	}
 	void tickPendingLDMSTM() {
+		bool errorOccurred = false;
 		auto& st = pendingOperationState.ldm_stm;
+		if (!st.load)
+			dumpAndAbort("STM not implemented");
+		if (st.special)
+			dumpAndAbort("LDM/STM special not implemented");
+		uint32_t value = memoryController.readWord(st.address, &errorOccurred);
+		if (errorOccurred) {
+			currentTick.tickError = TICK_ERROR_DATA_ABORT;
+			return;
+		}
+		if (st.up) {
+			unsigned int Rd = __builtin_ctz(st.register_list);
+			st.register_list &= ~(1 << Rd);
+			if (Rd == 15)
+				currentTick.nextPC = value;
+			else
+				writeRegister(Rd, value);
+			st.address += 4;
+			st.Rn_final += 4;
+		} else {
+			dumpAndAbort("LDM/STM down not implemented");
+		}
+		if (!st.register_list) {
+			if (st.writeback)
+				writeRegister(st.Rn, st.Rn_final);
+			currentTick.pendingOperation = PENDING_OPERATION_NONE;
+			return;
+		}
 	}
 	void inst_DATA(unsigned int opcode, bool S,
 			unsigned int Rd, unsigned int Rn, uint32_t shifter_operand, bool shifter_carry_out) {
@@ -197,10 +230,15 @@ public:
 				dumpAndAbort("data opcode %u unimplemented", opcode);
 				break;
 		}
-		if (S)
+		if (S) {
 			dumpAndAbort("data S flag");
-		if ((opcode & 0x0C) != 0x08)
-			writeRegister(Rd, alu_out);
+		}
+		if ((opcode & 0x0C) != 0x08) {
+			if (Rd == 15)
+				currentTick.nextPC = alu_out;
+			else
+				writeRegister(Rd, alu_out);
+		}
 	}
 	void inst_B_BL(bool L, uint32_t signed_immed_24) {
 		if (L)
@@ -211,6 +249,8 @@ public:
 	}
 	void inst_LDM_STM(
 			bool L, bool S, bool P, bool U, bool W, unsigned int Rn, uint32_t register_list) {
+		if (!register_list)
+			return;
 		currentTick.pendingOperation = PENDING_OPERATION_LDM_STM;
 		auto& st = pendingOperationState.ldm_stm;
 		st.load = L;
@@ -220,6 +260,7 @@ public:
 		st.Rn = Rn;
 		st.register_list = register_list;
 		uint32_t Rn_value = readRegister(Rn);
+		st.Rn_final = Rn_value;
 		if (U) {
 			if (P) // increment before
 				st.address = Rn_value + 4;
@@ -229,7 +270,7 @@ public:
 			if (P) // decrement before
 				st.address = Rn_value - 4;
 			else // decrement after
-				st.address = Rn;
+				st.address = Rn_value;
 		}
 	}
 	void inst_MRC(uint32_t cp_num, uint32_t opcode_1,
@@ -397,9 +438,13 @@ private:
 	public:
 		MemoryController(IMX233& core) : core(core) {}
 		uint32_t readWord(uint32_t addr, bool *errorOccurred) {
+			if (addr & 3)
+				core.dumpAndAbort("readWord unaligned");
 			return readWordPhysical(addr, errorOccurred);
 		}
 		void writeWord(uint32_t addr, uint32_t val, bool *errorOccurred) {
+			if (addr & 3)
+				core.dumpAndAbort("writeWord unaligned");
 			writeWordPhysical(addr, val, errorOccurred);
 		}
 		uint32_t readWordPhysical(uint32_t addr, bool *errorOccurred) {
@@ -449,6 +494,7 @@ private:
 			bool writeback;
 			unsigned int Rn;
 			uint32_t register_list;
+			uint32_t Rn_final;
 			uint32_t address;
 		} ldm_stm;
 	} pendingOperationState;
