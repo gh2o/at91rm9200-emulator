@@ -161,7 +161,20 @@ public:
 	}
 	void inst_DATA(TickState& tickState, unsigned int opcode, bool S,
 			unsigned int Rd, unsigned int Rn, uint32_t shifter_operand, bool shifter_carry_out) {
-		dumpAndAbort("data processing unimplemented");
+		uint32_t alu_out;
+		uint32_t Rn_value = readRegister(Rn);
+		switch (opcode) {
+			case 4:
+				alu_out = Rn_value + shifter_operand;
+				break;
+			default:
+				dumpAndAbort("data opcode %u unimplemented", opcode);
+				break;
+		}
+		if (S)
+			dumpAndAbort("data S flag");
+		if ((opcode & 0x0C) != 0x08)
+			writeRegister(Rd, alu_out);
 	}
 	void inst_B_BL(TickState& tickState, bool L, uint32_t signed_immed_24) {
 		if (L)
