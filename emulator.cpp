@@ -128,6 +128,17 @@ public:
 						break;
 				}
 				break;
+			case 4: // LDM/STM
+				{
+					bool P = encodedInst & (1 << 24);
+					bool U = encodedInst & (1 << 23);
+					bool S = encodedInst & (1 << 22);
+					bool W = encodedInst & (1 << 21);
+					bool L = encodedInst & (1 << 20);
+					uint32_t register_list = encodedInst & 0xFFFF;
+					inst_LDM_STM(tickState, L, S, P, U, W, register_list);
+				}
+				break;
 			case 5: // B/BL
 				inst_B_BL(tickState,
 						encodedInst & (1 << 24), /* L */
@@ -184,6 +195,10 @@ public:
 		if (signed_immed_24 & (1 << 23))
 			signed_immed_24 |= 0xFF << 24;
 		tickState.nextPC = readRegister(15) + (signed_immed_24 << 2);
+	}
+	void inst_LDM_STM(TickState& tickState,
+			bool L, bool S, bool P, bool U, bool W, uint32_t register_list) {
+		dumpAndAbort("LDM/STM");
 	}
 	void inst_MRC(TickState& tickState, uint32_t cp_num, uint32_t opcode_1,
 			unsigned int Rd, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
