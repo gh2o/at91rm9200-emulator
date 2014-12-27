@@ -48,6 +48,10 @@ public:
 		TICK_ERROR_PREFETCH_ABORT,
 		TICK_ERROR_DATA_ABORT,
 	};
+	enum PendingOperation {
+		PENDING_OPERATION_NONE = 0,
+		PENDING_OPERATION_LDM_STM,
+	};
 public:
 	IMX233() :
 			registerFile(*this),
@@ -59,21 +63,27 @@ public:
 		registerFile.reset();
 	}
 	void tick() {
-		TickState tickState;
-		tickState.tickError = TICK_ERROR_NONE;
-		tickState.nextPC = getPC() + 4;
-		tickInternal(tickState);
-		if (tickState.tickError != TICK_ERROR_NONE)
+		switch (currentTick.pendingOperation) {
+			case PENDING_OPERATION_NONE:
+				currentTick.tickError = TICK_ERROR_NONE;
+				currentTick.nextPC = getPC() + 4;
+				tickInternal();
+				break;
+			case PENDING_OPERATION_LDM_STM:
+				dumpAndAbort("pending ldm stm");
+				break;
+		}
+		if (currentTick.tickError != TICK_ERROR_NONE)
 			dumpAndAbort("tick error occurred");
-		else
-			setPC(tickState.nextPC);
+		if (currentTick.pendingOperation == PENDING_OPERATION_NONE)
+			setPC(currentTick.nextPC);
 	}
-	void tickInternal(TickState& tickState) {
+	void tickInternal() {
 		bool errorOccurred = false;
 		// fetch instruction
 		uint32_t encodedInst = memoryController.readWord(getPC(), &errorOccurred);
 		if (errorOccurred) {
-			tickState.tickError = TICK_ERROR_PREFETCH_ABORT;
+			currentTick.tickError = TICK_ERROR_PREFETCH_ABORT;
 			return;
 		}
 		// only execute if condition passes
@@ -103,7 +113,7 @@ public:
 							uint32_t _8_bit_immediate = encodedInst & 0xFF;
 							uint32_t rotate_imm = (encodedInst >> 8) & 0x0F;
 							uint32_t operand = rotateRight(_8_bit_immediate, rotate_imm * 2);
-							inst_MSR(tickState,
+							inst_MSR(
 									encodedInst & (1 << 22), /* R */
 									(encodedInst >> 16) & 0x0F, /* field_mask */
 									operand);
@@ -117,7 +127,7 @@ public:
 							bool shifter_carry_out = (rotate_imm == 0) ?
 								readCPSR() & PSR_BITS_C :
 								shifter_operand & (1 << 31);
-							inst_DATA(tickState,
+							inst_DATA(
 									dec2 >> 1, /* opcode */
 									dec2 & 0x01, /* S */
 									Rd,
@@ -136,11 +146,11 @@ public:
 					bool W = encodedInst & (1 << 21);
 					bool L = encodedInst & (1 << 20);
 					uint32_t register_list = encodedInst & 0xFFFF;
-					inst_LDM_STM(tickState, L, S, P, U, W, register_list);
+					inst_LDM_STM(L, S, P, U, W, Rn, register_list);
 				}
 				break;
 			case 5: // B/BL
-				inst_B_BL(tickState,
+				inst_B_BL(
 						encodedInst & (1 << 24), /* L */
 						encodedInst & 0x00FFFFFF);
 				break;
@@ -150,7 +160,7 @@ public:
 					case 9: case 11: case 13: case 15: // MRC/CDP
 						if (dec3 & 0x01) {
 							// MRC
-							inst_MRC(tickState,
+							inst_MRC(
 									(encodedInst >> 8) & 0x0F, /* cp_num */
 									(encodedInst >> 21) & 0x07, /* opcode_1 */
 									Rd,
@@ -172,7 +182,7 @@ public:
 				break;
 		}
 	}
-	void inst_DATA(TickState& tickState, unsigned int opcode, bool S,
+	void inst_DATA(unsigned int opcode, bool S,
 			unsigned int Rd, unsigned int Rn, uint32_t shifter_operand, bool shifter_carry_out) {
 		uint32_t alu_out;
 		uint32_t Rn_value = readRegister(Rn);
@@ -189,18 +199,22 @@ public:
 		if ((opcode & 0x0C) != 0x08)
 			writeRegister(Rd, alu_out);
 	}
-	void inst_B_BL(TickState& tickState, bool L, uint32_t signed_immed_24) {
+	void inst_B_BL(bool L, uint32_t signed_immed_24) {
 		if (L)
 			writeRegister(14, getPC() + 4);
 		if (signed_immed_24 & (1 << 23))
 			signed_immed_24 |= 0xFF << 24;
-		tickState.nextPC = readRegister(15) + (signed_immed_24 << 2);
+		currentTick.nextPC = readRegister(15) + (signed_immed_24 << 2);
 	}
-	void inst_LDM_STM(TickState& tickState,
-			bool L, bool S, bool P, bool U, bool W, uint32_t register_list) {
-		dumpAndAbort("LDM/STM");
+	void inst_LDM_STM(
+			bool L, bool S, bool P, bool U, bool W, unsigned int Rn, uint32_t register_list) {
+		currentTick.pendingOperation = PENDING_OPERATION_LDM_STM;
+		auto& s = pendingOperationState.ldm_stm;
+		s.L = L; s.S = S; s.P = P; s.U = U; s.W = W;
+		s.Rn = Rn;
+		s.register_list = register_list;
 	}
-	void inst_MRC(TickState& tickState, uint32_t cp_num, uint32_t opcode_1,
+	void inst_MRC(uint32_t cp_num, uint32_t opcode_1,
 			unsigned int Rd, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
 		if (cp_num != 15)
 			dumpAndAbort("access to coproc other than CP15");
@@ -212,7 +226,7 @@ public:
 			writeRegister(Rd, data);
 		}
 	}
-	void inst_MSR(TickState& tickState, bool R, uint32_t field_mask, uint32_t operand) {
+	void inst_MSR(bool R, uint32_t field_mask, uint32_t operand) {
 		uint32_t mask =
 			((field_mask & (1 << 0)) ? 0x000000FF : 0) |
 			((field_mask & (1 << 1)) ? 0x0000FF00 : 0) |
@@ -288,7 +302,8 @@ public:
 	void setPC(uint32_t val) { registerFile.setPC(val); }
 private:
 	struct TickState {
-		TickError tickError;
+		TickError tickError = TICK_ERROR_NONE;
+		PendingOperation pendingOperation = PENDING_OPERATION_NONE;
 		uint32_t nextPC;
 	};
 	class RegisterFile {
@@ -407,6 +422,14 @@ private:
 	RegisterFile registerFile;
 	MemoryController memoryController;
 	SystemControlCoprocessor systemControlCoprocessor;
+	TickState currentTick;
+	union {
+		struct {
+			bool L, S, P, U, W;
+			unsigned int Rn;
+			uint32_t register_list;
+		} ldm_stm;
+	} pendingOperationState;
 };
 
 std::vector<char> readFileToVector(const char *path) {
