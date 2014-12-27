@@ -258,15 +258,36 @@ public:
 		uint32_t alu_out;
 		uint32_t Rn_value = readRegister(Rn);
 		switch (opcode) {
+			case 0:
+				alu_out = Rn_value & shifter_operand;
+				break;
+			case 2:
+				alu_out = Rn_value - shifter_operand;
+				break;
 			case 4:
 				alu_out = Rn_value + shifter_operand;
+				break;
+			case 9:
+				alu_out = Rn_value ^ shifter_operand;
 				break;
 			default:
 				dumpAndAbort("data opcode %u unimplemented", opcode);
 				break;
 		}
 		if (S) {
-			dumpAndAbort("data S flag");
+			uint32_t newCPSR =
+				(readCPSR() & ~(PSR_BITS_N | PSR_BITS_Z | PSR_BITS_C)) |
+				(alu_out & PSR_BITS_N) |
+				(alu_out == 0 ? PSR_BITS_Z : 0) |
+				(shifter_carry_out ? PSR_BITS_Z : 0);
+			switch (opcode) {
+				case 9:
+					break;
+				default:
+					dumpAndAbort("data opcode %u S unimplemented", opcode);
+					break;
+			}
+			writeCPSR(newCPSR);
 		}
 		if ((opcode & 0x0C) != 0x08)
 			writeRegister(Rd, alu_out);
