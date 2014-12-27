@@ -259,7 +259,19 @@ public:
 	void tickPendingLDRSTR() {
 		bool errorOccurred = false;
 		auto& st = pendingOperationState.ldr_str;
-		dumpAndAbort("tick LDR/STR");
+		if (!st.load)
+			dumpAndAbort("STR not implemented");
+		if (st.byte)
+			dumpAndAbort("LDRB/STRB not implemented");
+		uint32_t data = memoryController.readWord(st.address, &errorOccurred);
+		if (errorOccurred) {
+			currentTick.tickError = TICK_ERROR_DATA_ABORT;
+			return;
+		}
+		writeRegister(st.Rd, data);
+		if (st.writeback)
+			writeRegister(st.Rn, st.Rn_final);
+		currentTick.pendingOperation = PENDING_OPERATION_NONE;
 	}
 	void tickPendingLDMSTM() {
 		bool errorOccurred = false;
@@ -286,7 +298,6 @@ public:
 			if (st.writeback)
 				writeRegister(st.Rn, st.Rn_final);
 			currentTick.pendingOperation = PENDING_OPERATION_NONE;
-			return;
 		}
 	}
 	void inst_DATA(unsigned int opcode, bool S,
