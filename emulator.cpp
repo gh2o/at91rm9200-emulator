@@ -726,6 +726,7 @@ private:
 		SystemControlCoprocessor(IMX233& core) : core(core) {}
 		void reset() {
 			controlReg = CONTROL_REG_SBO;
+			domainAccess = 0;
 		}
 		uint32_t read(unsigned int opcode_1, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
 			switch (CRn) {
@@ -754,6 +755,10 @@ private:
 		}
 		void write(unsigned int opcode_1, unsigned int CRn, unsigned int CRm, unsigned int opcode_2, uint32_t data) {
 			switch (CRn) {
+				case 3:
+					printf("domain access: %08x\n", data);
+					domainAccess = data;
+					break;
 				case 7:
 					fprintf(stderr, "TODO: cache management (CRn=7)\n");
 					break;
@@ -768,6 +773,7 @@ private:
 	private:
 		IMX233& core;
 		uint32_t controlReg;
+		uint32_t domainAccess;
 	};
 private:
 	std::unique_ptr<uint32_t[]> systemMemory;
