@@ -62,6 +62,9 @@ public:
 	}
 	void reset() {
 		registerFile.reset();
+		memoryController.reset();
+		systemControlCoprocessor.reset();
+		currentTick.reset();
 	}
 	void tick() {
 		switch (currentTick.pendingOperation) {
@@ -605,9 +608,14 @@ public:
 	void setPC(uint32_t pc) { currentTick.curPC = pc; }
 private:
 	struct TickState {
-		TickError tickError = TICK_ERROR_NONE;
-		PendingOperation pendingOperation = PENDING_OPERATION_NONE;
+		TickError tickError;
+		PendingOperation pendingOperation;
 		uint32_t curPC;
+		void reset() {
+			tickError = TICK_ERROR_NONE;
+			pendingOperation = PENDING_OPERATION_NONE;
+			curPC = 0;
+		}
 	};
 	class RegisterFile {
 	public:
@@ -615,7 +623,6 @@ private:
 			registerView[15] = &programCounter;
 			for (int i = 0; i <= 7; i++)
 				registerView[i] = &(nonBanked[i]);
-			reset();
 		}
 		void reset() {
 			writeCPSR(CPU_MODE_SVC | PSR_BITS_F | PSR_BITS_I | PSR_BITS_A);
@@ -681,6 +688,7 @@ private:
 	class MemoryController {
 	public:
 		MemoryController(IMX233& core) : core(core) {}
+		void reset() {}
 		uint32_t readWord(uint32_t addr, bool *errorOccurred) {
 			if (addr & 3)
 				core.dumpAndAbort("readWord unaligned");
@@ -708,8 +716,17 @@ private:
 		IMX233& core;
 	};
 	class SystemControlCoprocessor {
+		enum ControlRegBits {
+			CONTROL_REG_M = 1 << 0, // MMU enabled
+			CONTROL_REG_A = 1 << 1, // strict alignment
+			CONTROL_REG_SBZ = 0xfc1a0000,
+			CONTROL_REG_SBO = 0x00050072,
+		};
 	public:
 		SystemControlCoprocessor(IMX233& core) : core(core) {}
+		void reset() {
+			controlReg = CONTROL_REG_SBO;
+		}
 		uint32_t read(unsigned int opcode_1, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
 			switch (CRn) {
 				case 0: // ID codes
@@ -739,6 +756,7 @@ private:
 		}
 	private:
 		IMX233& core;
+		uint32_t controlReg;
 	};
 private:
 	std::unique_ptr<uint32_t[]> systemMemory;
