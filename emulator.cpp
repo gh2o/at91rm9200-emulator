@@ -67,10 +67,10 @@ public:
 			case PENDING_OPERATION_NONE:
 				currentTick.tickError = TICK_ERROR_NONE;
 				currentTick.nextPC = getPC() + 4;
-				tickInternal();
+				tickExecute();
 				break;
 			case PENDING_OPERATION_LDM_STM:
-				dumpAndAbort("pending ldm stm");
+				tickPendingLDMSTM();
 				break;
 		}
 		if (currentTick.tickError != TICK_ERROR_NONE)
@@ -78,7 +78,7 @@ public:
 		if (currentTick.pendingOperation == PENDING_OPERATION_NONE)
 			setPC(currentTick.nextPC);
 	}
-	void tickInternal() {
+	void tickExecute() {
 		bool errorOccurred = false;
 		// fetch instruction
 		uint32_t encodedInst = memoryController.readWord(getPC(), &errorOccurred);
@@ -182,6 +182,9 @@ public:
 				break;
 		}
 	}
+	void tickPendingLDMSTM() {
+		auto& st = pendingOperationState.ldm_stm;
+	}
 	void inst_DATA(unsigned int opcode, bool S,
 			unsigned int Rd, unsigned int Rn, uint32_t shifter_operand, bool shifter_carry_out) {
 		uint32_t alu_out;
@@ -209,10 +212,25 @@ public:
 	void inst_LDM_STM(
 			bool L, bool S, bool P, bool U, bool W, unsigned int Rn, uint32_t register_list) {
 		currentTick.pendingOperation = PENDING_OPERATION_LDM_STM;
-		auto& s = pendingOperationState.ldm_stm;
-		s.L = L; s.S = S; s.P = P; s.U = U; s.W = W;
-		s.Rn = Rn;
-		s.register_list = register_list;
+		auto& st = pendingOperationState.ldm_stm;
+		st.load = L;
+		st.special = S;
+		st.up = U;
+		st.writeback = W;
+		st.Rn = Rn;
+		st.register_list = register_list;
+		uint32_t Rn_value = readRegister(Rn);
+		if (U) {
+			if (P) // increment before
+				st.address = Rn_value + 4;
+			else // increment after
+				st.address = Rn_value;
+		} else {
+			if (P) // decrement before
+				st.address = Rn_value - 4;
+			else // decrement after
+				st.address = Rn;
+		}
 	}
 	void inst_MRC(uint32_t cp_num, uint32_t opcode_1,
 			unsigned int Rd, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
@@ -425,9 +443,13 @@ private:
 	TickState currentTick;
 	union {
 		struct {
-			bool L, S, P, U, W;
+			bool load;
+			bool special;
+			bool up;
+			bool writeback;
 			unsigned int Rn;
 			uint32_t register_list;
+			uint32_t address;
 		} ldm_stm;
 	} pendingOperationState;
 };
