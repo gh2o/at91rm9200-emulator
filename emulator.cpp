@@ -271,16 +271,23 @@ public:
 	void tickPendingLDRSTR() {
 		bool errorOccurred = false;
 		auto& st = pendingOperationState.ldr_str;
-		if (!st.load)
-			dumpAndAbort("STR not implemented");
 		if (st.byte)
 			dumpAndAbort("LDRB/STRB not implemented");
-		uint32_t data = memoryController.readWord(st.address, &errorOccurred);
-		if (errorOccurred) {
-			currentTick.tickError = TICK_ERROR_DATA_ABORT;
-			return;
+		if (st.load) {
+			uint32_t data = memoryController.readWord(st.address, &errorOccurred);
+			if (errorOccurred) {
+				currentTick.tickError = TICK_ERROR_DATA_ABORT;
+				return;
+			}
+			writeRegister(st.Rd, data);
+		} else {
+			uint32_t data = readRegister(st.Rd);
+			memoryController.writeWord(st.address, data, &errorOccurred);
+			if (errorOccurred) {
+				currentTick.tickError = TICK_ERROR_DATA_ABORT;
+				return;
+			}
 		}
-		writeRegister(st.Rd, data);
 		if (st.writeback)
 			writeRegister(st.Rn, st.Rn_final);
 		currentTick.pendingOperation = PENDING_OPERATION_NONE;
@@ -601,13 +608,16 @@ private:
 			writeWordPhysical(addr, val, errorOccurred);
 		}
 		uint32_t readWordPhysical(uint32_t addr, bool *errorOccurred) {
-			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize)
+			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize) {
 				return core.systemMemory[(addr - systemMemoryBase) / 4];
+			}
 			core.dumpAndAbort("readWordPhysical");
 		}
 		void writeWordPhysical(uint32_t addr, uint32_t val, bool *errorOccurred) {
-			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize)
+			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize) {
 				core.systemMemory[(addr - systemMemoryBase) / 4] = val;
+				return;
+			}
 			core.dumpAndAbort("writeWordPhysical");
 		}
 	private:
