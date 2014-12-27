@@ -37,7 +37,11 @@ public:
 		PSR_BITS_I = 1 << 7,
 		PSR_BITS_A = 1 << 8,
 		PSR_BITS_E = 1 << 9,
-		PSR_BITS_J = 1 << 24
+		PSR_BITS_J = 1 << 24,
+		PSR_BITS_V = 1 << 28,
+		PSR_BITS_C = 1 << 29,
+		PSR_BITS_Z = 1 << 30,
+		PSR_BITS_N = 1 << 31,
 	};
 	enum TickError {
 		TICK_ERROR_NONE = 0,
@@ -89,6 +93,10 @@ public:
 		switch (dec1) {
 			case 1:
 				switch (dec2) {
+					case 16:
+					case 20: // undefined
+						dumpAndAbort("decode 1.x undefined");
+						break;
 					case 18: // MSR CPSR, #immed
 					case 22: // MSR SPSR, #immed
 						{
@@ -101,9 +109,27 @@ public:
 									operand);
 						}
 						break;
-					default:
-						dumpAndAbort("decode 1.%d unknown", dec2);
+					default: // data processing with immediate
+						uint32_t immed_8 = encodedInst & 0xFF;
+						uint32_t rotate_imm = (encodedInst >> 8) & 0x0F;
+						uint32_t shifter_operand = rotateRight(immed_8, rotate_imm * 2);
+						bool shifter_carry_out = (rotate_imm == 0) ?
+							readCPSR() & PSR_BITS_C : 
+							shifter_operand & (1 << 31);
+						inst_DATA(tickState,
+								dec2 >> 1, /* opcode */
+								dec2 & 0x01, /* S */
+								Rd,
+								Rn,
+								shifter_operand,
+								shifter_carry_out);
+						break;
 				}
+				break;
+			case 5: // B/BL
+				inst_B_BL(tickState,
+						encodedInst & (1 << 24), /* L */
+						encodedInst & 0x00FFFFFF);
 				break;
 			case 7:
 				switch (dec2) {
@@ -125,11 +151,24 @@ public:
 						break;
 					default:
 						dumpAndAbort("decode 7.%d unknown", dec2);
+						break;
 				}
 				break;
 			default:
 				dumpAndAbort("decode %d unknown", dec1);
+				break;
 		}
+	}
+	void inst_DATA(TickState& tickState, unsigned int opcode, bool S,
+			unsigned int Rd, unsigned int Rn, uint32_t shifter_operand, bool shifter_carry_out) {
+		dumpAndAbort("data processing unimplemented");
+	}
+	void inst_B_BL(TickState& tickState, bool L, uint32_t signed_immed_24) {
+		if (L)
+			writeRegister(14, getPC() + 4);
+		if (signed_immed_24 & (1 << 23))
+			signed_immed_24 |= 0xFF << 24;
+		tickState.nextPC = readRegister(15) + (signed_immed_24 << 2);
 	}
 	void inst_MRC(TickState& tickState, uint32_t cp_num, uint32_t opcode_1,
 			unsigned int Rd, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
