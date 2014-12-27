@@ -364,7 +364,7 @@ public:
 				(readCPSR() & ~(PSR_BITS_N | PSR_BITS_Z | PSR_BITS_C)) |
 				(alu_out & PSR_BITS_N) |
 				(alu_out == 0 ? PSR_BITS_Z : 0) |
-				(shifter_carry_out ? PSR_BITS_Z : 0);
+				(shifter_carry_out ? PSR_BITS_C : 0);
 			bool a, b, r = alu_out & (1 << 31);
 			switch (opcode) {
 				case 8:
