@@ -152,14 +152,18 @@ public:
 								shift_imm = (encodedInst >> 7) & 0x1F;
 							switch (shift_type) {
 								case 0: // LSL
-									if (shift_imm != 0)
-										dumpAndAbort("non-zero shift");
+									if (shift_imm < 32) {
+										shifter_carry_out = shifter_operand & (1 << (32 - shift_imm));
+										shifter_operand <<= shift_imm;
+									} else {
+										dumpAndAbort("LSL bad shift %u", shift_imm);
+									}
 									break;
 								case 1: // LSR
 									if (!is_reg && shift_imm == 0)
 										shift_imm = 32;
 									if (shift_imm < 32) {
-										shifter_carry_out = shifter_operand & (1 << (shift_imm  - 1));
+										shifter_carry_out = shifter_operand & (1 << (shift_imm - 1));
 										shifter_operand >>= shift_imm;
 									} else {
 										dumpAndAbort("LSR bad shift %u", shift_imm);
