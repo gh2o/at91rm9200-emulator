@@ -234,6 +234,23 @@ public:
 					inst_LDR_STR(L, B, P, U, W, Rd, Rn, offset_12);
 				}
 				break;
+			case 3: // LDR/STR register offset
+				if (!(dec3 & 0x01)) {
+					bool P = encodedInst & (1 << 24);
+					bool U = encodedInst & (1 << 23);
+					bool B = encodedInst & (1 << 22);
+					bool W = encodedInst & (1 << 21);
+					bool L = encodedInst & (1 << 20);
+					uint32_t shift_type = (dec3 >> 1) & 0x03;
+					uint32_t shift_imm = (encodedInst >> 7) & 0x1F;
+					if (shift_type || shift_imm)
+						dumpAndAbort("scaled LDR/STR unimplemented");
+					uint32_t offset_12 = readRegister(Rm);
+					inst_LDR_STR(L, B, P, U, W, Rd, Rn, offset_12);
+				} else {
+					dumpAndAbort("unknown decode 3");
+				}
+				break;
 			case 4: // LDM/STM
 				{
 					bool P = encodedInst & (1 << 24);
