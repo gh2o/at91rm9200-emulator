@@ -50,6 +50,7 @@ public:
 	};
 	enum PendingOperation {
 		PENDING_OPERATION_NONE = 0,
+		PENDING_OPERATION_LDR_STR,
 		PENDING_OPERATION_LDM_STM,
 	};
 public:
@@ -68,6 +69,9 @@ public:
 				currentTick.tickError = TICK_ERROR_NONE;
 				registerFile.setProgramCounter(currentTick.curPC + 4);
 				tickExecute();
+				break;
+			case PENDING_OPERATION_LDR_STR:
+				tickPendingLDRSTR();
 				break;
 			case PENDING_OPERATION_LDM_STM:
 				tickPendingLDMSTM();
@@ -197,6 +201,17 @@ public:
 						break;
 				}
 				break;
+			case 2: // LDR/STR immediate offset
+				{
+					bool P = encodedInst & (1 << 24);
+					bool U = encodedInst & (1 << 23);
+					bool B = encodedInst & (1 << 22);
+					bool W = encodedInst & (1 << 21);
+					bool L = encodedInst & (1 << 20);
+					uint32_t offset_12 = encodedInst & 0xFFF;
+					inst_LDR_STR(L, B, P, U, W, Rd, Rn, offset_12);
+				}
+				break;
 			case 4: // LDM/STM
 				{
 					bool P = encodedInst & (1 << 24);
@@ -240,6 +255,11 @@ public:
 				dumpAndAbort("decode %d unknown", dec1);
 				break;
 		}
+	}
+	void tickPendingLDRSTR() {
+		bool errorOccurred = false;
+		auto& st = pendingOperationState.ldr_str;
+		dumpAndAbort("tick LDR/STR");
 	}
 	void tickPendingLDMSTM() {
 		bool errorOccurred = false;
@@ -320,6 +340,28 @@ public:
 		if (signed_immed_24 & (1 << 23))
 			signed_immed_24 |= 0xFF << 24;
 		writeRegister(15, readRegister(15) + (signed_immed_24 << 2));
+	}
+	void inst_LDR_STR(
+			bool L, bool B, bool P, bool U, bool W,
+			unsigned int Rd, unsigned int Rn, uint32_t offset_12) {
+		currentTick.pendingOperation = PENDING_OPERATION_LDR_STR;
+		auto& st = pendingOperationState.ldr_str;
+		st.load = L;
+		st.byte = B;
+		st.writeback = (P == W);
+		st.Rn = Rn;
+		st.Rd = Rd;
+		uint32_t Rn_value = readRegister(Rn);
+		uint32_t offsettedAddress = U ?
+			Rn_value + offset_12 :
+			Rn_value - offset_12;
+		st.Rn_final = offsettedAddress;
+		if (P)
+			st.address = offsettedAddress;
+		else
+			st.address = Rn_value;
+		if (!P && W)
+			dumpAndAbort("LDRT/STRT not implemented");
 	}
 	void inst_LDM_STM(
 			bool L, bool S, bool P, bool U, bool W, unsigned int Rn, uint32_t register_list) {
@@ -571,6 +613,15 @@ private:
 			uint32_t Rn_final;
 			uint32_t address;
 		} ldm_stm;
+		struct {
+			bool load;
+			bool byte;
+			bool writeback;
+			unsigned int Rn;
+			unsigned int Rd;
+			uint32_t Rn_final;
+			uint32_t address;
+		} ldr_str;
 	} pendingOperationState;
 };
 
