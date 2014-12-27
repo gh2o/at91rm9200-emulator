@@ -109,6 +109,12 @@ public:
 			case 3:
 				condPass = !(readCPSR() & PSR_BITS_C);
 				break;
+			case 8:
+				condPass = (readCPSR() & (PSR_BITS_C | PSR_BITS_Z)) == PSR_BITS_C;
+				break;
+			case 9:
+				condPass = (readCPSR() ^ PSR_BITS_C) & (PSR_BITS_C | PSR_BITS_Z);
+				break;
 			case 14:
 				condPass = true;
 				break;
