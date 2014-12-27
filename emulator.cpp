@@ -135,11 +135,12 @@ public:
 					default:
 						if ((dec3 & 0x09) != 0x09) {
 							// data processing with register
+							bool is_reg = dec3 & 0x01;
 							uint32_t shift_type = (dec3 >> 1) & 0x03;
 							uint32_t shift_imm;
-							uint32_t shifter_operand = readRegister(Rm);
 							bool shifter_carry_out = readCPSR() & PSR_BITS_C;
-							if (dec3 & 0x01)
+							uint32_t shifter_operand = readRegister(Rm);
+							if (is_reg)
 								shift_imm = readRegister(Rs) & 0xFF;
 							else
 								shift_imm = (encodedInst >> 7) & 0x1F;
@@ -148,8 +149,19 @@ public:
 									if (shift_imm != 0)
 										dumpAndAbort("non-zero shift");
 									break;
+								case 1: // LSR
+									if (!is_reg && shift_imm == 0)
+										shift_imm = 32;
+									if (shift_imm < 32) {
+										shifter_carry_out = shifter_operand & (1 << (shift_imm  - 1));
+										shifter_operand >>= shift_imm;
+									} else {
+										dumpAndAbort("LSR bad shift %u", shift_imm);
+									}
+									break;
 								default:
 									dumpAndAbort("unknown shift type %d", shift_type);
+									break;
 							}
 							inst_DATA(
 									dec2 >> 1, /* opcode */
