@@ -322,6 +322,9 @@ public:
 			case 13:
 				alu_out = shifter_operand;
 				break;
+			case 15:
+				alu_out = ~shifter_operand;
+				break;
 			default:
 				dumpAndAbort("data opcode %u unimplemented", opcode);
 				break;
