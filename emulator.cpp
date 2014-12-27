@@ -141,38 +141,9 @@ public:
 					default:
 						if ((dec3 & 0x09) != 0x09) {
 							// data processing with register
-							bool is_reg = dec3 & 0x01;
-							uint32_t shift_type = (dec3 >> 1) & 0x03;
-							uint32_t shift_imm;
-							bool shifter_carry_out = readCPSR() & PSR_BITS_C;
-							uint32_t shifter_operand = readRegister(Rm);
-							if (is_reg)
-								shift_imm = readRegister(Rs) & 0xFF;
-							else
-								shift_imm = (encodedInst >> 7) & 0x1F;
-							switch (shift_type) {
-								case 0: // LSL
-									if (shift_imm < 32) {
-										shifter_carry_out = shifter_operand & (1 << (32 - shift_imm));
-										shifter_operand <<= shift_imm;
-									} else {
-										dumpAndAbort("LSL bad shift %u", shift_imm);
-									}
-									break;
-								case 1: // LSR
-									if (!is_reg && shift_imm == 0)
-										shift_imm = 32;
-									if (shift_imm < 32) {
-										shifter_carry_out = shifter_operand & (1 << (shift_imm - 1));
-										shifter_operand >>= shift_imm;
-									} else {
-										dumpAndAbort("LSR bad shift %u", shift_imm);
-									}
-									break;
-								default:
-									dumpAndAbort("unknown shift type %d", shift_type);
-									break;
-							}
+							uint32_t shifter_operand;
+							bool shifter_carry_out;
+							decodeShifterOperand(encodedInst, &shifter_operand, &shifter_carry_out);
 							inst_DATA(
 									dec2 >> 1, /* opcode */
 									dec2 & 0x01, /* S */
@@ -527,6 +498,43 @@ public:
 		fprintf(stderr, "pc = %08x (%08x)\n", pc, memoryController.readWord(pc, &err));
 		// goodbye
 		abort();
+	}
+	void decodeShifterOperand(uint32_t encodedInst, uint32_t *shifter_operand, bool *shifter_carry_out) {
+		unsigned int dec3 = (encodedInst >> 4) & 0x0F;
+		unsigned int Rs = (encodedInst >> 8) & 0x0F;
+		unsigned int Rm = (encodedInst >> 0) & 0x0F;
+		bool is_reg = dec3 & 0x01;
+		uint32_t shift_type = (dec3 >> 1) & 0x03;
+		uint32_t shift_imm;
+		*shifter_carry_out = readCPSR() & PSR_BITS_C;
+		*shifter_operand = readRegister(Rm);
+		if (is_reg)
+			shift_imm = readRegister(Rs) & 0xFF;
+		else
+			shift_imm = (encodedInst >> 7) & 0x1F;
+		switch (shift_type) {
+			case 0: // LSL
+				if (shift_imm < 32) {
+					*shifter_carry_out = *shifter_operand & (1 << (32 - shift_imm));
+					*shifter_operand <<= shift_imm;
+				} else {
+					dumpAndAbort("LSL bad shift %u", shift_imm);
+				}
+				break;
+			case 1: // LSR
+				if (!is_reg && shift_imm == 0)
+					shift_imm = 32;
+				if (shift_imm < 32) {
+					*shifter_carry_out = *shifter_operand & (1 << (shift_imm - 1));
+					*shifter_operand >>= shift_imm;
+				} else {
+					dumpAndAbort("LSR bad shift %u", shift_imm);
+				}
+				break;
+			default:
+				dumpAndAbort("unknown shift type %d", shift_type);
+				break;
+		}
 	}
 	void allocateMemory(uint32_t size) {
 		systemMemory.reset(new uint32_t[size / 4 + 1]);
