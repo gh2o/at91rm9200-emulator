@@ -66,7 +66,7 @@ public:
 		switch (currentTick.pendingOperation) {
 			case PENDING_OPERATION_NONE:
 				currentTick.tickError = TICK_ERROR_NONE;
-				currentTick.nextPC = getPC() + 4;
+				registerFile.setProgramCounter(currentTick.curPC + 4);
 				tickExecute();
 				break;
 			case PENDING_OPERATION_LDM_STM:
@@ -78,9 +78,7 @@ public:
 			dumpAndAbort("tick error occurred");
 		}
 		if (currentTick.pendingOperation == PENDING_OPERATION_NONE) {
-			if (currentTick.nextPC & 0x03)
-				dumpAndAbort("nextPC not aligned");
-			setPC(currentTick.nextPC);
+			currentTick.curPC = registerFile.getProgramCounter();
 		}
 	}
 	void tickExecute() {
@@ -202,10 +200,7 @@ public:
 		if (st.up) {
 			unsigned int Rd = __builtin_ctz(st.register_list);
 			st.register_list &= ~(1 << Rd);
-			if (Rd == 15)
-				currentTick.nextPC = value;
-			else
-				writeRegister(Rd, value);
+			writeRegister(Rd, value);
 			st.address += 4;
 			st.Rn_final += 4;
 		} else {
@@ -233,19 +228,15 @@ public:
 		if (S) {
 			dumpAndAbort("data S flag");
 		}
-		if ((opcode & 0x0C) != 0x08) {
-			if (Rd == 15)
-				currentTick.nextPC = alu_out;
-			else
-				writeRegister(Rd, alu_out);
-		}
+		if ((opcode & 0x0C) != 0x08)
+			writeRegister(Rd, alu_out);
 	}
 	void inst_B_BL(bool L, uint32_t signed_immed_24) {
 		if (L)
 			writeRegister(14, getPC() + 4);
 		if (signed_immed_24 & (1 << 23))
 			signed_immed_24 |= 0xFF << 24;
-		currentTick.nextPC = readRegister(15) + (signed_immed_24 << 2);
+		writeRegister(15, readRegister(15) + (signed_immed_24 << 2));
 	}
 	void inst_LDM_STM(
 			bool L, bool S, bool P, bool U, bool W, unsigned int Rn, uint32_t register_list) {
@@ -357,13 +348,13 @@ public:
 	void writeSPSR(uint32_t val) { registerFile.writeSPSR(val); }
 	uint32_t readRegister(uint32_t reg) { return registerFile.readRegister(reg); }
 	void writeRegister(uint32_t reg, uint32_t val) { registerFile.writeRegister(reg, val); }
-	uint32_t getPC() { return registerFile.getPC(); }
-	void setPC(uint32_t val) { registerFile.setPC(val); }
+	uint32_t getPC() { return currentTick.curPC; }
+	void setPC(uint32_t pc) { currentTick.curPC = pc; }
 private:
 	struct TickState {
 		TickError tickError = TICK_ERROR_NONE;
 		PendingOperation pendingOperation = PENDING_OPERATION_NONE;
-		uint32_t nextPC;
+		uint32_t curPC;
 	};
 	class RegisterFile {
 	public:
@@ -410,18 +401,18 @@ private:
 		uint32_t readRegister(uint32_t reg) {
 			uint32_t *regPtr = registerView[reg];
 			if (regPtr == &programCounter)
-				return programCounter + 8;
+				return programCounter + 4;
 			else
 				return *regPtr;
 		}
 		void writeRegister(uint32_t reg, uint32_t val) {
 			*(registerView[reg]) = val;
 		}
-		uint32_t getPC() {
+		uint32_t getProgramCounter() {
 			return programCounter;
 		}
-		void setPC(uint32_t val) {
-			programCounter = val;
+		void setProgramCounter(uint32_t pc) {
+			programCounter = pc;
 		}
 	private:
 		IMX233& core;
