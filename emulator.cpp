@@ -727,6 +727,7 @@ private:
 		void reset() {
 			controlReg = CONTROL_REG_SBO;
 			domainAccess = 0;
+			translationTableBase = 0;
 		}
 		uint32_t read(unsigned int opcode_1, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
 			switch (CRn) {
@@ -755,8 +756,10 @@ private:
 		}
 		void write(unsigned int opcode_1, unsigned int CRn, unsigned int CRm, unsigned int opcode_2, uint32_t data) {
 			switch (CRn) {
+				case 2:
+					translationTableBase = data;
+					break;
 				case 3:
-					printf("domain access: %08x\n", data);
 					domainAccess = data;
 					break;
 				case 7:
@@ -774,6 +777,7 @@ private:
 		IMX233& core;
 		uint32_t controlReg;
 		uint32_t domainAccess;
+		uint32_t translationTableBase;
 	};
 private:
 	std::unique_ptr<uint32_t[]> systemMemory;
