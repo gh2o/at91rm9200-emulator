@@ -343,6 +343,7 @@ public:
 				alu_out = Rn_value - shifter_operand;
 				break;
 			case 4:
+			case 11:
 				alu_out = Rn_value + shifter_operand;
 				break;
 			case 9:
@@ -369,6 +370,15 @@ public:
 				case 8:
 				case 9:
 				case 13:
+					break;
+				case 4:
+				case 11:
+					a = Rn_value & (1 << 31);
+					b = shifter_operand & (1 << 31);
+					newCPSR =
+						(newCPSR & ~(PSR_BITS_C | PSR_BITS_V)) |
+						((a & b) | (a & !r) | (b & !r) ? PSR_BITS_C : 0) |
+						((!a & !b & r) | (a & b & !r) ? PSR_BITS_V : 0);
 					break;
 				case 2:
 				case 10:
