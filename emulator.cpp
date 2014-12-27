@@ -366,8 +366,14 @@ public:
 			case 9:
 				alu_out = Rn_value ^ shifter_operand;
 				break;
+			case 12:
+				alu_out = Rn_value | shifter_operand;
+				break;
 			case 13:
 				alu_out = shifter_operand;
+				break;
+			case 14:
+				alu_out = Rn_value & ~shifter_operand;
 				break;
 			case 15:
 				alu_out = ~shifter_operand;
