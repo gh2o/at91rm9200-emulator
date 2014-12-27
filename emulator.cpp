@@ -90,9 +90,25 @@ public:
 			return;
 		}
 		// only execute if condition passes
-		if ((encodedInst >> 28) != 0x0E)
-			dumpAndAbort("unknown condition");
-		bool condPass = true;
+		bool condPass;
+		unsigned int condType = encodedInst >> 28;
+		switch (condType) {
+			case 0:
+				condPass = readCPSR() & PSR_BITS_Z;
+				break;
+			case 1:
+				condPass = !(readCPSR() & PSR_BITS_Z);
+				break;
+			case 14:
+				condPass = true;
+				break;
+			case 15:
+				dumpAndAbort("unconditional instructions unimplemented");
+				break;
+			default:
+				dumpAndAbort("unknown condition %d", condType);
+				break;
+		}
 		if (!condPass)
 			return;
 		// decode and dispatch
