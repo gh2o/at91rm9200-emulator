@@ -36,7 +36,8 @@ public:
 		PSR_BITS_F = 1 << 6,
 		PSR_BITS_I = 1 << 7,
 		PSR_BITS_A = 1 << 8,
-		PSR_BITS_E = 1 << 9
+		PSR_BITS_E = 1 << 9,
+		PSR_BITS_J = 1 << 24
 	};
 	enum TickError {
 		TICK_ERROR_NONE = 0,
@@ -236,6 +237,9 @@ private:
 			return curCPSR;
 		}
 		void writeCPSR(uint32_t newCPSR) {
+			// check for unsupported values
+			if (newCPSR & (PSR_BITS_T | PSR_BITS_J))
+				core.dumpAndAbort("T or J bits enabled");
 			// save CPSR
 			curCPSR = newCPSR;
 			// modify banks
