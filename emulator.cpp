@@ -579,6 +579,7 @@ public:
 						((!a & !b & r) | (a & b & !r) ? PSR_BITS_V : 0);
 					break;
 				case 2:
+				case 6:
 				case 10:
 					a = Rn_value & (1 << 31);
 					b = shifter_operand & (1 << 31);
