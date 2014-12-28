@@ -321,7 +321,7 @@ public:
 		if (st.up)
 			Rd = __builtin_ctz(st.register_list);
 		else
-			dumpAndAbort("LDM/STM down not implemented");
+			Rd = 31 - __builtin_clz(st.register_list);
 		if (st.load) {
 			uint32_t value = memoryController.readWord(st.address, errorOccurred);
 			if (errorOccurred) {
