@@ -529,7 +529,7 @@ public:
 		for (int i = 0; i < 15; i++)
 			fprintf(stderr, "r%d = %08x\n", i, readRegister(i));
 		uint32_t pc = getPC();
-		bool err;
+		bool err = false;
 		fprintf(stderr, "pc = %08x (%08x)\n", pc, memoryController.readWord(pc, &err));
 		// goodbye
 		abort();
@@ -691,11 +691,17 @@ private:
 		uint32_t readWord(uint32_t addr, bool *errorOccurred) {
 			if (addr & 3)
 				core.dumpAndAbort("readWord unaligned");
+			addr = translateAddress(addr, errorOccurred);
+			if (*errorOccurred)
+				return 0;
 			return readWordPhysical(addr, errorOccurred);
 		}
 		void writeWord(uint32_t addr, uint32_t val, bool *errorOccurred) {
 			if (addr & 3)
 				core.dumpAndAbort("writeWord unaligned");
+			addr = translateAddress(addr, errorOccurred);
+			if (*errorOccurred)
+				return;
 			writeWordPhysical(addr, val, errorOccurred);
 		}
 		uint32_t readWordPhysical(uint32_t addr, bool *errorOccurred) {
@@ -710,6 +716,11 @@ private:
 				return;
 			}
 			core.dumpAndAbort("writeWordPhysical");
+		}
+		uint32_t translateAddress(uint32_t addr, bool *errorOccurred) {
+			if (!core.systemControlCoprocessor.isMMUEnabled())
+				return addr;
+			core.dumpAndAbort("translateAddress");
 		}
 	private:
 		IMX233& core;
@@ -785,6 +796,9 @@ private:
 					core.dumpAndAbort("CP15 unknown register write %d", CRn);
 					break;
 			}
+		}
+		bool isMMUEnabled() {
+			return controlReg & CONTROL_REG_M;
 		}
 	private:
 		IMX233& core;
