@@ -1002,14 +1002,14 @@ private:
 			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize) {
 				return core.systemMemory[(addr - systemMemoryBase) / 4];
 			}
-			core.dumpAndAbort("readWordPhysical");
+			core.dumpAndAbort("readWordPhysical: %08x", addr);
 		}
 		void writeWordPhysical(uint32_t addr, uint32_t val, bool& errorOccurred) {
 			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize) {
 				core.systemMemory[(addr - systemMemoryBase) / 4] = val;
 				return;
 			}
-			core.dumpAndAbort("writeWordPhysical");
+			core.dumpAndAbort("writeWordPhysical: %08x", addr);
 		}
 		uint32_t translateAddress(uint32_t addr, bool& errorOccurred) {
 			auto& scc = core.systemControlCoprocessor;
