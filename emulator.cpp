@@ -718,7 +718,8 @@ private:
 			core.dumpAndAbort("writeWordPhysical");
 		}
 		uint32_t translateAddress(uint32_t addr, bool *errorOccurred) {
-			if (!core.systemControlCoprocessor.isMMUEnabled())
+			uint32_t creg = core.systemControlCoprocessor.controlReg;
+			if (!(creg & SystemControlCoprocessor::CONTROL_REG_M))
 				return addr;
 			core.dumpAndAbort("translateAddress");
 		}
@@ -797,14 +798,12 @@ private:
 					break;
 			}
 		}
-		bool isMMUEnabled() {
-			return controlReg & CONTROL_REG_M;
-		}
 	private:
 		IMX233& core;
 		uint32_t controlReg;
 		uint32_t domainAccess;
 		uint32_t translationTableBase;
+		friend class MemoryController;
 	};
 private:
 	std::unique_ptr<uint32_t[]> systemMemory;
