@@ -181,8 +181,24 @@ public:
 									Rn,
 									shifter_operand,
 									shifter_carry_out);
+						} else if (dec3 & 0x06) {
+							bool P = encodedInst & (1 << 24);
+							bool U = encodedInst & (1 << 23);
+							bool I = encodedInst & (1 << 22);
+							bool W = encodedInst & (1 << 21);
+							bool L = encodedInst & (1 << 20);
+							bool S = encodedInst & (1 << 6);
+							bool H = encodedInst & (1 << 5);
+							if (!P && W)
+								dumpAndAbort("bad misc L/S");
+							uint32_t offset;
+							if (I)
+								offset = ((encodedInst >> 4) & 0xF0) | (encodedInst & 0x0F);
+							else
+								offset = readRegister(Rm);
+							inst_misc_LDR_STR(L, S, H, U, P, W, Rd, Rn, offset);
 						} else {
-							dumpAndAbort("multiply or extra L/S unimplemented");
+							dumpAndAbort("unknown SWP or multiply");
 						}
 						break;
 				}
@@ -544,6 +560,33 @@ public:
 				st.address = Rn_value - 4;
 			else // decrement after
 				st.address = Rn_value;
+		}
+	}
+	void inst_misc_LDR_STR(
+			bool L, bool S, bool H, bool U, bool P, bool W,
+			unsigned int Rd, unsigned int Rn, uint32_t offset) {
+		auto& st = pendingOperationState.misc_ldr_str;
+		st.signextend = S;
+		st.writeback = (P == W);
+		st.Rn = Rn;
+		st.Rd = Rd;
+		uint32_t Rn_value = readRegister(Rn);
+		uint32_t offsettedAddress = U ?
+			Rn_value + offset :
+			Rn_value - offset;
+		st.Rn_final = offsettedAddress;
+		if (P)
+			st.address = offsettedAddress;
+		else
+			st.address = Rn_value;
+		if (L && H) {
+			dumpAndAbort("LDR(S)H");
+		} else if (!L && S) {
+			dumpAndAbort("LDRD/STRD");
+		} else if (L) {
+			dumpAndAbort("LDRSB");
+		} else {
+			dumpAndAbort("STRH");
 		}
 	}
 	void inst_MCR(uint32_t cp_num, uint32_t opcode_1,
@@ -951,6 +994,14 @@ private:
 			bool hasInjectedValue;
 			uint32_t injectedValue;
 		} ldr_str;
+		struct {
+			bool signextend;
+			bool writeback;
+			unsigned int Rn;
+			unsigned int Rd;
+			uint32_t Rn_final;
+			uint32_t address;
+		} misc_ldr_str;
 	} pendingOperationState;
 };
 
