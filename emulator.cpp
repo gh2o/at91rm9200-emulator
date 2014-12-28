@@ -220,6 +220,13 @@ public:
 							bool accumulate = encodedInst & (1 << 21);
 							bool S = encodedInst & (1 << 20);
 							inst_MULL_MLAL(signedmult, accumulate, S, RdLo, RdHi, Rm, Rs);
+						} else if ((dec2 & 0x1C) == 0) {
+							// MUL/MLA
+							unsigned int mulRd = Rn;
+							unsigned int mulRn = Rd;
+							bool accumulate = encodedInst & (1 << 21);
+							bool S = encodedInst & (1 << 20);
+							inst_MUL_MLA(accumulate, S, mulRd, Rm, Rs, mulRn);
 						} else {
 							dumpAndAbort("unknown SWP or multiply");
 						}
@@ -579,6 +586,24 @@ public:
 		}
 		if ((opcode & 0x0C) != 0x08)
 			writeRegister(Rd, alu_out);
+	}
+	void inst_MUL_MLA(bool accumulate, bool S,
+			unsigned int Rd, unsigned int Rm,
+			unsigned int Rs, unsigned int Rn) {
+		uint32_t Rm_value = readRegister(Rm);
+		uint32_t Rs_value = readRegister(Rs);
+		uint32_t Rn_value = readRegister(Rn);
+		uint32_t res = Rm_value * Rs_value;
+		if (accumulate)
+			res += Rn_value;
+		writeRegister(Rd, res);
+		if (S) {
+			uint32_t newCPSR =
+				(readCPSR() & ~(PSR_BITS_N | PSR_BITS_Z)) |
+				(res & (1 << 31) ? PSR_BITS_N : 0) |
+				(res == 0 ? PSR_BITS_Z : 0);
+			writeCPSR(newCPSR);
+		}
 	}
 	void inst_MULL_MLAL(bool signedmult, bool accumulate, bool S,
 			unsigned int RdLo, unsigned int RdHi,
