@@ -718,10 +718,45 @@ private:
 			core.dumpAndAbort("writeWordPhysical");
 		}
 		uint32_t translateAddress(uint32_t addr, bool& errorOccurred) {
-			uint32_t creg = core.systemControlCoprocessor.controlReg;
-			if (!(creg & SystemControlCoprocessor::CONTROL_REG_M))
+			auto& scc = core.systemControlCoprocessor;
+			typedef SystemControlCoprocessor SCC;
+			if (!(scc.controlReg & SCC::CONTROL_REG_M))
 				return addr;
-			core.dumpAndAbort("translateAddress");
+			// should be set
+			unsigned int domain;
+			uint32_t newaddr;
+			// first level walk
+			uint32_t desc1addr =
+				(scc.translationTableBase & 0xFFFFC000) |
+				((addr >> 18) & 0x3FFC);
+			uint32_t desc1 = readWordPhysical(desc1addr, errorOccurred);
+			if (errorOccurred)
+				return 0;
+			unsigned int desc1type = desc1 & 0x03;
+			switch (desc1type) {
+				case 0: // fault
+					errorOccurred = true;
+					return 0;
+				case 2: // section
+					domain = (desc1 >> 5) & 0xF;
+					newaddr = (desc1 & 0xFFF00000) | (addr & 0x000FFFFF);
+					break;
+				default:
+					core.dumpAndAbort("unsupported level 1 type %d\n", desc1type);
+					break;
+			}
+			// check domain
+			if ((domain & 0x01) == 0) { // domain fault
+				errorOccurred = true;
+				return 0;
+			}
+			// check permissions if required
+			if (domain == 1) {
+				// client domain
+				core.dumpAndAbort("client domain");
+			}
+			// done!
+			return newaddr;
 		}
 	private:
 		IMX233& core;
