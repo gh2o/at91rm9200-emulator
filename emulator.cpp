@@ -315,24 +315,36 @@ public:
 	void tickPendingLDMSTM() {
 		bool errorOccurred = false;
 		auto& st = pendingOperationState.ldm_stm;
-		if (!st.load)
-			dumpAndAbort("STM not implemented");
 		if (st.special)
 			dumpAndAbort("LDM/STM special not implemented");
-		uint32_t value = memoryController.readWord(st.address, errorOccurred);
-		if (errorOccurred) {
-			currentTick.tickError = TICK_ERROR_DATA_ABORT;
-			return;
+		unsigned int Rd;
+		if (st.up)
+			Rd = __builtin_ctz(st.register_list);
+		else
+			dumpAndAbort("LDM/STM down not implemented");
+		if (st.load) {
+			uint32_t value = memoryController.readWord(st.address, errorOccurred);
+			if (errorOccurred) {
+				currentTick.tickError = TICK_ERROR_DATA_ABORT;
+				return;
+			}
+			writeRegister(Rd, value);
+		} else {
+			uint32_t value = readRegister(Rd);
+			memoryController.writeWord(st.address, value, errorOccurred);
+			if (errorOccurred) {
+				currentTick.tickError = TICK_ERROR_DATA_ABORT;
+				return;
+			}
 		}
 		if (st.up) {
-			unsigned int Rd = __builtin_ctz(st.register_list);
-			st.register_list &= ~(1 << Rd);
-			writeRegister(Rd, value);
 			st.address += 4;
 			st.Rn_final += 4;
 		} else {
-			dumpAndAbort("LDM/STM down not implemented");
+			st.address -= 4;
+			st.Rn_final -= 4;
 		}
+		st.register_list &= ~(1 << Rd);
 		if (!st.register_list) {
 			if (st.writeback)
 				writeRegister(st.Rn, st.Rn_final);
