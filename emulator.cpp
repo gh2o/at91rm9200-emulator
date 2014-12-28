@@ -136,7 +136,6 @@ public:
 		unsigned int dec3 = (encodedInst >> 4) & 0x0F;
 		unsigned int Rn = (encodedInst >> 16) & 0x0F;
 		unsigned int Rd = (encodedInst >> 12) & 0x0F;
-		unsigned int Rs = (encodedInst >> 8) & 0x0F;
 		unsigned int Rm = (encodedInst >> 0) & 0x0F;
 		switch (dec1) {
 			case 0:
