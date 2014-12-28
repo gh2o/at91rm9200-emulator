@@ -768,6 +768,19 @@ public:
 		else
 			writeRegister(Rd, readSPSR());
 	}
+	void dumpState() {
+		// dump PC
+		uint32_t pc = getPC();
+		bool err = false;
+		uint32_t inst = memoryController.readWord(pc, err);
+		if (!err)
+			fprintf(stderr, "pc = %08x (%08x)\n", pc, inst);
+		else
+			fprintf(stderr, "pc = %08x\n", pc);
+		// dump info
+		for (int i = 0; i < 15; i++)
+			fprintf(stderr, "r%d = %08x\n", i, readRegister(i));
+	}
 	__attribute__((noreturn, format(printf, 2, 3)))
 	void dumpAndAbort(const char *format, ...) {
 		// print message line
@@ -777,12 +790,8 @@ public:
 		vfprintf(stderr, format, args);
 		va_end(args);
 		fputc('\n', stderr);
-		// dump info
-		for (int i = 0; i < 15; i++)
-			fprintf(stderr, "r%d = %08x\n", i, readRegister(i));
-		uint32_t pc = getPC();
-		bool err = false;
-		fprintf(stderr, "pc = %08x (%08x)\n", pc, memoryController.readWord(pc, err));
+		// dump state
+		dumpState();
 		// goodbye
 		abort();
 	}
