@@ -746,12 +746,13 @@ private:
 					break;
 			}
 			// check domain
-			if ((domain & 0x01) == 0) { // domain fault
+			unsigned int domacc = (scc.domainAccess >> (domain * 2)) & 0x03;
+			if ((domacc & 0x01) == 0) { // domain fault
 				errorOccurred = true;
 				return 0;
 			}
 			// check permissions if required
-			if (domain == 1) {
+			if (domacc == 1) {
 				// client domain
 				core.dumpAndAbort("client domain");
 			}
