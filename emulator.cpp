@@ -17,7 +17,7 @@ static inline uint32_t rotateRight(uint32_t val, uint32_t count) {
 	return (val >> count) | (val << (32 - count));
 }
 
-class IMX233 {
+class ARM920T {
 public:
 	struct MemoryInterface;
 private:
@@ -58,7 +58,7 @@ public:
 		PENDING_OPERATION_LDRH_LDRSH,
 	};
 public:
-	IMX233(MemoryInterface& mi) :
+	ARM920T(MemoryInterface& mi) :
 			memoryInterface(mi),
 			registerFile(*this),
 			memoryController(*this),
@@ -914,7 +914,7 @@ public:
 	void setPC(uint32_t pc) { currentTick.curPC = pc; }
 public:
 	struct MemoryInterface {
-		virtual void reset(IMX233& core) {}
+		virtual void reset(ARM920T& core) {}
 		virtual uint32_t readWordPhysical(uint32_t addr, bool& errorOccurred) = 0;
 		virtual void writeWordPhysical(uint32_t addr, uint32_t val, bool& errorOccurred) = 0;
 	};
@@ -931,7 +931,7 @@ private:
 	};
 	class RegisterFile {
 	public:
-		RegisterFile(IMX233& core) : core(core) {
+		RegisterFile(ARM920T& core) : core(core) {
 			registerView[15] = &programCounter;
 			for (int i = 0; i <= 7; i++)
 				registerView[i] = &(nonBanked[i]);
@@ -987,7 +987,7 @@ private:
 			programCounter = pc;
 		}
 	private:
-		IMX233& core;
+		ARM920T& core;
 		uint32_t curCPSR;
 		uint32_t storedSPSR[16];
 		uint32_t nonBanked[8];
@@ -999,7 +999,7 @@ private:
 	};
 	class MemoryController {
 	public:
-		MemoryController(IMX233& core) : core(core) {}
+		MemoryController(ARM920T& core) : core(core) {}
 		void reset() {}
 		uint32_t readWord(uint32_t addr, bool& errorOccurred) {
 			if (addr & 3)
@@ -1068,7 +1068,7 @@ private:
 			return newaddr;
 		}
 	private:
-		IMX233& core;
+		ARM920T& core;
 	};
 	class SystemControlCoprocessor {
 		enum ControlRegBits {
@@ -1080,7 +1080,7 @@ private:
 			CONTROL_REG_SBO = 0x00050072,
 		};
 	public:
-		SystemControlCoprocessor(IMX233& core) : core(core) {}
+		SystemControlCoprocessor(ARM920T& core) : core(core) {}
 		void reset() {
 			controlReg = CONTROL_REG_SBO;
 			domainAccess = 0;
@@ -1143,7 +1143,7 @@ private:
 			}
 		}
 	private:
-		IMX233& core;
+		ARM920T& core;
 		uint32_t controlReg;
 		uint32_t domainAccess;
 		uint32_t translationTableBase;
@@ -1190,11 +1190,11 @@ private:
 	} pendingOperationState;
 };
 
-class AT91RM9200Interface : public IMX233::MemoryInterface {
+class AT91RM9200Interface : public ARM920T::MemoryInterface {
 public:
 	static constexpr uint32_t systemMemoryBase = 0x20000000;
 public:
-	void reset(IMX233& core) {
+	void reset(ARM920T& core) {
 		corePtr = &core;
 	}
 	void allocateSystemMemory(uint32_t size) {
@@ -1234,7 +1234,7 @@ public:
 		corePtr->dumpAndAbort("writeWordPhysical: %08x", addr);
 	}
 private:
-	IMX233 *corePtr;
+	ARM920T *corePtr;
 	std::unique_ptr<uint32_t[]> systemMemory;
 	uint32_t systemMemorySize = 0;
 };
@@ -1250,8 +1250,8 @@ std::vector<char> readFileToVector(const char *path) {
 	}
 }
 
-void coreMainLoop(IMX233* coreptr) {
-	IMX233& core = *coreptr;
+void coreMainLoop(ARM920T* coreptr) {
+	ARM920T& core = *coreptr;
 	while (true)
 		core.tick();
 }
@@ -1280,7 +1280,7 @@ int main(int argc, char *argv[]) {
 	interface.allocateSystemMemory(64 * 1024 * 1024);
 
 	// initialize core
-	IMX233 core(interface);
+	ARM920T core(interface);
 
 	// load kernel image
 	uint32_t kernelStart = 0x8000;
