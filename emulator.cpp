@@ -18,9 +18,11 @@ static inline uint32_t rotateRight(uint32_t val, uint32_t count) {
 }
 
 class IMX233 {
+public:
+	struct MemoryInterface;
+private:
 	struct TickState;
 public:
-	static constexpr uint32_t systemMemoryBase = 0x20000000;
 	enum CPUMode {
 		CPU_MODE_USER = 0x10,
 		CPU_MODE_FIQ = 0x11,
@@ -56,13 +58,15 @@ public:
 		PENDING_OPERATION_LDRH_LDRSH,
 	};
 public:
-	IMX233() :
+	IMX233(MemoryInterface& mi) :
+			memoryInterface(mi),
 			registerFile(*this),
 			memoryController(*this),
 			systemControlCoprocessor(*this) {
 		reset();
 	}
 	void reset() {
+		memoryInterface.reset(*this);
 		registerFile.reset();
 		memoryController.reset();
 		systemControlCoprocessor.reset();
@@ -897,29 +901,6 @@ public:
 				break;
 		}
 	}
-	void allocateMemory(uint32_t size) {
-		systemMemory.reset(new uint32_t[size / 4 + 1]);
-		systemMemorySize = size;
-	}
-	void loadImage(const void *base, uint32_t size, uint32_t location) {
-		if (size & 3) {
-			std::cerr << "Warning: Image size is not word-aligned." << std::endl;
-			size = (size + 3) &~3;
-		}
-		if (location & 3) {
-			std::cerr << "Error: Image location is not word-aligned." << std::endl;
-			exit(1);
-		}
-		if (location + size > systemMemorySize) {
-			std::cerr << "Error: Image does not fit in allocated memory." << std::endl;
-			exit(1);
-		}
-		uint32_t wordCount = size / 4;
-		const uint32_t *srcBase = static_cast<const uint32_t *>(base);
-		uint32_t *dstBase = systemMemory.get() + location / 4;
-		for (uint32_t i = 0; i < wordCount; i++)
-			dstBase[i] = le32toh(srcBase[i]);
-	}
 	bool isPrivileged() {
 		return (readCPSR() & PSR_BITS_MODE) != CPU_MODE_USER;
 	}
@@ -931,6 +912,12 @@ public:
 	void writeRegister(uint32_t reg, uint32_t val) { registerFile.writeRegister(reg, val); }
 	uint32_t getPC() { return currentTick.curPC; }
 	void setPC(uint32_t pc) { currentTick.curPC = pc; }
+public:
+	struct MemoryInterface {
+		virtual void reset(IMX233& core) {}
+		virtual uint32_t readWordPhysical(uint32_t addr, bool& errorOccurred) = 0;
+		virtual void writeWordPhysical(uint32_t addr, uint32_t val, bool& errorOccurred) = 0;
+	};
 private:
 	struct TickState {
 		TickError tickError;
@@ -1031,17 +1018,10 @@ private:
 			writeWordPhysical(addr, val, errorOccurred);
 		}
 		uint32_t readWordPhysical(uint32_t addr, bool& errorOccurred) {
-			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize) {
-				return core.systemMemory[(addr - systemMemoryBase) / 4];
-			}
-			core.dumpAndAbort("readWordPhysical: %08x", addr);
+			return core.memoryInterface.readWordPhysical(addr, errorOccurred);
 		}
 		void writeWordPhysical(uint32_t addr, uint32_t val, bool& errorOccurred) {
-			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize) {
-				core.systemMemory[(addr - systemMemoryBase) / 4] = val;
-				return;
-			}
-			core.dumpAndAbort("writeWordPhysical: %08x", addr);
+			core.memoryInterface.writeWordPhysical(addr, val, errorOccurred);
 		}
 		uint32_t translateAddress(uint32_t addr, bool& errorOccurred) {
 			auto& scc = core.systemControlCoprocessor;
@@ -1170,8 +1150,7 @@ private:
 		friend class MemoryController;
 	};
 private:
-	std::unique_ptr<uint32_t[]> systemMemory;
-	uint32_t systemMemorySize = 0;
+	MemoryInterface& memoryInterface;
 	RegisterFile registerFile;
 	MemoryController memoryController;
 	SystemControlCoprocessor systemControlCoprocessor;
@@ -1211,6 +1190,55 @@ private:
 	} pendingOperationState;
 };
 
+class AT91RM9200Interface : public IMX233::MemoryInterface {
+public:
+	static constexpr uint32_t systemMemoryBase = 0x20000000;
+public:
+	void reset(IMX233& core) {
+		corePtr = &core;
+	}
+	void allocateSystemMemory(uint32_t size) {
+		systemMemory.reset(new uint32_t[size / 4 + 1]);
+		systemMemorySize = size;
+	}
+	void loadImageIntoMemory(const void *base, uint32_t size, uint32_t location) {
+		if (size & 3) {
+			std::cerr << "Warning: Image size is not word-aligned." << std::endl;
+			size = (size + 3) &~3;
+		}
+		if (location & 3) {
+			std::cerr << "Error: Image location is not word-aligned." << std::endl;
+			exit(1);
+		}
+		if (location + size > systemMemorySize) {
+			std::cerr << "Error: Image does not fit in allocated memory." << std::endl;
+			exit(1);
+		}
+		uint32_t wordCount = size / 4;
+		const uint32_t *srcBase = static_cast<const uint32_t *>(base);
+		uint32_t *dstBase = systemMemory.get() + location / 4;
+		for (uint32_t i = 0; i < wordCount; i++)
+			dstBase[i] = le32toh(srcBase[i]);
+	}
+	uint32_t readWordPhysical(uint32_t addr, bool& errorOccurred) {
+		if (addr >= systemMemoryBase && addr < systemMemoryBase + systemMemorySize) {
+			return systemMemory[(addr - systemMemoryBase) / 4];
+		}
+		corePtr->dumpAndAbort("readWordPhysical: %08x", addr);
+	}
+	void writeWordPhysical(uint32_t addr, uint32_t val, bool& errorOccurred) {
+		if (addr >= systemMemoryBase && addr < systemMemoryBase + systemMemorySize) {
+			systemMemory[(addr - systemMemoryBase) / 4] = val;
+			return;
+		}
+		corePtr->dumpAndAbort("writeWordPhysical: %08x", addr);
+	}
+private:
+	IMX233 *corePtr;
+	std::unique_ptr<uint32_t[]> systemMemory;
+	uint32_t systemMemorySize = 0;
+};
+
 std::vector<char> readFileToVector(const char *path) {
 	std::ifstream stream(path);
 	if (!stream) {
@@ -1247,13 +1275,16 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	// initialize interface
+	AT91RM9200Interface interface;
+	interface.allocateSystemMemory(64 * 1024 * 1024);
+
 	// initialize core
-	IMX233 core;
-	core.allocateMemory(64 * 1024 * 1024);
+	IMX233 core(interface);
 
 	// load kernel image
 	uint32_t kernelStart = 0x8000;
-	core.loadImage(kernelImage.data(), kernelImage.size(), kernelStart);
+	interface.loadImageIntoMemory(kernelImage.data(), kernelImage.size(), kernelStart);
 
 	// load device blob
 	uint32_t dtbStart = 8 * 1024 * 1024;
@@ -1261,12 +1292,12 @@ int main(int argc, char *argv[]) {
 		std::cerr << "Error: Kernel image overlaps device blob." << std::endl;
 		return 1;
 	}
-	core.loadImage(deviceBlob.data(), deviceBlob.size(), dtbStart);
+	interface.loadImageIntoMemory(deviceBlob.data(), deviceBlob.size(), dtbStart);
 
 	// set registers
 	core.writeRegister(1, 0xFFFFFFFF);
-	core.writeRegister(2, IMX233::systemMemoryBase + dtbStart);
-	core.setPC(IMX233::systemMemoryBase + kernelStart);
+	core.writeRegister(2, AT91RM9200Interface::systemMemoryBase + dtbStart);
+	core.setPC(AT91RM9200Interface::systemMemoryBase + kernelStart);
 
 	// start CPU in background thread
 	std::thread coreThread(coreMainLoop, &core);
