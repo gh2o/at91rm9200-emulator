@@ -506,6 +506,9 @@ public:
 			case 11:
 				alu_out = Rn_value + shifter_operand;
 				break;
+			case 6:
+				alu_out = Rn_value - shifter_operand - !(readCPSR() & PSR_BITS_C);
+				break;
 			case 9:
 				alu_out = Rn_value ^ shifter_operand;
 				break;
