@@ -313,21 +313,33 @@ public:
 	void tickPendingLDRSTR() {
 		bool errorOccurred = false;
 		auto& st = pendingOperationState.ldr_str;
-		if (st.byte)
-			dumpAndAbort("LDRB/STRB not implemented");
-		if (st.load) {
-			uint32_t data = memoryController.readWord(st.address, errorOccurred);
-			if (errorOccurred) {
-				currentTick.tickError = TICK_ERROR_DATA_ABORT;
-				return;
+		if (st.byte) {
+			if (st.load) {
+				uint32_t data = memoryController.readWord(st.address & ~3, errorOccurred);
+				if (errorOccurred) {
+					currentTick.tickError = TICK_ERROR_DATA_ABORT;
+					return;
+				}
+				unsigned int shift = 8 * (st.address & 3);
+				writeRegister(st.Rd, (data >> shift) & 0xFF);
+			} else {
+				dumpAndAbort("STRB not implemented");
 			}
-			writeRegister(st.Rd, data);
 		} else {
-			uint32_t data = readRegister(st.Rd);
-			memoryController.writeWord(st.address, data, errorOccurred);
-			if (errorOccurred) {
-				currentTick.tickError = TICK_ERROR_DATA_ABORT;
-				return;
+			if (st.load) {
+				uint32_t data = memoryController.readWord(st.address, errorOccurred);
+				if (errorOccurred) {
+					currentTick.tickError = TICK_ERROR_DATA_ABORT;
+					return;
+				}
+				writeRegister(st.Rd, data);
+			} else {
+				uint32_t data = readRegister(st.Rd);
+				memoryController.writeWord(st.address, data, errorOccurred);
+				if (errorOccurred) {
+					currentTick.tickError = TICK_ERROR_DATA_ABORT;
+					return;
+				}
 			}
 		}
 		if (st.writeback)
@@ -907,6 +919,8 @@ private:
 			unsigned int Rd;
 			uint32_t Rn_final;
 			uint32_t address;
+			bool hasInjectedValue;
+			uint32_t injectedValue;
 		} ldr_str;
 	} pendingOperationState;
 };
