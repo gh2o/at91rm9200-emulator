@@ -1302,6 +1302,8 @@ private:
 			switch (addr) {
 				case 0x14: // status register
 					return 0x0202;
+				case 0x1C: // transmit register
+					return 0;
 				default:
 					core().dumpAndAbort("DBGU read %02x", addr);
 					break;
@@ -1309,6 +1311,9 @@ private:
 		}
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x1C: // transmit register
+					fputc(val, stdout);
+					break;
 				default:
 					core().dumpAndAbort("DBGU write %02x", addr);
 					break;
