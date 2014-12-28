@@ -658,7 +658,7 @@ private:
 				registerView[i] = &(nonBanked[i]);
 		}
 		void reset() {
-			writeCPSR(CPU_MODE_SVC | PSR_BITS_F | PSR_BITS_I | PSR_BITS_A);
+			writeCPSR(CPU_MODE_SVC | PSR_BITS_F | PSR_BITS_I);
 		}
 		uint32_t readCPSR() {
 			return curCPSR;
