@@ -800,34 +800,50 @@ public:
 			shift_imm = (encodedInst >> 7) & 0x1F;
 		switch (shift_type) {
 			case 0: // LSL
-				if (shift_imm < 32) {
+				if (shift_imm == 0) {
+					// default
+				} else if (shift_imm < 32) {
 					*shifter_carry_out = *shifter_operand & (1 << (32 - shift_imm));
 					*shifter_operand <<= shift_imm;
-				} else {
-					dumpAndAbort("LSL bad shift %u", shift_imm);
+				} else if (shift_imm == 32) {
+					*shifter_carry_out = *shifter_operand & (1 << 0);
+					*shifter_operand = 0;
+				} else if (shift_imm > 32) {
+					*shifter_carry_out = false;
+					*shifter_operand = 0;
 				}
 				break;
 			case 1: // LSR
 				if (!is_reg && shift_imm == 0)
 					shift_imm = 32;
-				if (shift_imm < 32) {
+				if (shift_imm == 0) {
+					// default
+				} else if (shift_imm < 32) {
 					*shifter_carry_out = *shifter_operand & (1 << (shift_imm - 1));
 					*shifter_operand >>= shift_imm;
-				} else {
-					dumpAndAbort("LSR bad shift %u", shift_imm);
+				} else if (shift_imm == 32) {
+					*shifter_carry_out = *shifter_operand & (1 << 31);
+					*shifter_operand = 0;
+				} else if (shift_imm > 32) {
+					*shifter_carry_out = false;
+					*shifter_operand = 0;
 				}
 				break;
 			case 2: // ASR
 				if (!is_reg && shift_imm == 0)
 					shift_imm = 32;
-				if (shift_imm < 32) {
+				if (shift_imm == 0) {
+					// default
+				} else if (shift_imm < 32) {
 					bool sign = *shifter_operand & (1 << 31);
 					*shifter_carry_out = *shifter_operand & (1 << (shift_imm - 1));
 					*shifter_operand >>= shift_imm;
 					if (sign)
 						*shifter_operand |= 0xFFFFFFFF << (32 - shift_imm);
 				} else {
-					dumpAndAbort("ASR bad shift %u", shift_imm);
+					bool sign = *shifter_operand & (1 << 31);
+					*shifter_carry_out = sign;
+					*shifter_operand = sign ? 0xFFFFFFFF : 0;
 				}
 				break;
 			default:
