@@ -335,7 +335,7 @@ public:
 					}
 				} else {
 					// load and inject
-					uint32_t data = memoryController.readWord(st.address, errorOccurred);
+					uint32_t data = memoryController.readWord(aladdr, errorOccurred);
 					if (errorOccurred) {
 						currentTick.tickError = TICK_ERROR_DATA_ABORT;
 						return;
