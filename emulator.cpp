@@ -840,8 +840,21 @@ public:
 					*shifter_operand = sign ? 0xFFFFFFFF : 0;
 				}
 				break;
-			default:
-				dumpAndAbort("unknown shift type %d", shift_type);
+			case 3:
+				if (!is_reg && shift_imm == 0) { // RRX
+					dumpAndAbort("RRX");
+				} else { // ROR
+					uint32_t rotate_amt = shift_imm & 0x1F;
+					if (shift_imm == 0) {
+						// default
+					} else if (rotate_amt == 0) {
+						*shifter_carry_out = *shifter_operand & (1 << 31);
+						// shifter_operand default
+					} else {
+						*shifter_carry_out = *shifter_operand & (1 << (rotate_amt - 1));
+						*shifter_operand = rotateRight(*shifter_operand, rotate_amt);
+					}
+				}
 				break;
 		}
 	}
