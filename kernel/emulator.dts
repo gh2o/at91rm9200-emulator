@@ -53,3 +53,10 @@
 		reg = <0x40000000 0x04000000>; /* 64 MiB */
 	};
 };
+
+/* overridden */
+/ {
+	chosen {
+		bootargs = "earlyprintk";
+	};
+};
