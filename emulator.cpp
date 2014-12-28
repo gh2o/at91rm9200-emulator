@@ -199,7 +199,7 @@ public:
 						bool S = encodedInst & (1 << 20);
 						inst_MUL_MLA(accumulate, S, mulRd, Rm, Rs, mulRn);
 					} else {
-						dumpAndAbort("unknown decode 0a.%d.%d", dec2, dec3);
+						dumpAndAbort("unknown decode 0a.[%d].[%d]", dec2, dec3);
 					}
 				} else if ((dec2 & 0x19) == 0x10) {
 					switch (dec3) {
@@ -215,8 +215,15 @@ public:
 								}
 							}
 							break;
+						case 1:
+							if (dec2 == 0x12) {
+								inst_BX(Rm);
+							} else {
+								dumpAndAbort("unknown decode 0.[%d].1", dec2);
+							}
+							break;
 						default:
-							dumpAndAbort("unknown decode 0b.%d.%d", dec2, dec3);
+							dumpAndAbort("unknown decode 0b.[%d].[%d]", dec2, dec3);
 							break;
 					}
 				} else {
@@ -649,6 +656,12 @@ public:
 		if (signed_immed_24 & (1 << 23))
 			signed_immed_24 |= 0xFF << 24;
 		writeRegister(15, readRegister(15) + (signed_immed_24 << 2));
+	}
+	void inst_BX(unsigned int Rm) {
+		uint32_t value = readRegister(Rm);
+		if (value & 3)
+			dumpAndAbort("BX to thumb code");
+		writeRegister(15, value);
 	}
 	void inst_LDR_STR(
 			bool L, bool B, bool P, bool U, bool W,
