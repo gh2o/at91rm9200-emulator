@@ -53,6 +53,7 @@ public:
 		PENDING_OPERATION_LDR_STR,
 		PENDING_OPERATION_LDM_STM,
 		PENDING_OPERATION_STRH,
+		PENDING_OPERATION_LDRH_LDRSH,
 	};
 public:
 	IMX233() :
@@ -82,6 +83,9 @@ public:
 				break;
 			case PENDING_OPERATION_STRH:
 				tickPendingSTRH();
+				break;
+			case PENDING_OPERATION_LDRH_LDRSH:
+				tickPendingLDRHLDRSH();
 				break;
 		}
 		if (currentTick.tickError != TICK_ERROR_NONE) {
@@ -458,6 +462,24 @@ public:
 			writeRegister(st.Rn, st.Rn_final);
 		currentTick.pendingOperation = PENDING_OPERATION_NONE;
 	}
+	void tickPendingLDRHLDRSH() {
+		bool errorOccurred = false;
+		auto& st = pendingOperationState.misc_ldr_str;
+		unsigned int shift = 8 * (st.address & 2);
+		uint32_t aladdr = st.address & ~2;
+		uint32_t data = memoryController.readWord(aladdr, errorOccurred);
+		if (errorOccurred) {
+			currentTick.tickError = TICK_ERROR_DATA_ABORT;
+			return;
+		}
+		data = (data >> shift) & 0xFFFF;
+		if (st.signextend && (data & 0x8000))
+			data |= 0xFFFF0000;
+		writeRegister(st.Rd, data);
+		if (st.writeback)
+			writeRegister(st.Rn, st.Rn_final);
+		currentTick.pendingOperation = PENDING_OPERATION_NONE;
+	}
 	void inst_DATA(unsigned int opcode, bool S,
 			unsigned int Rd, unsigned int Rn, uint32_t shifter_operand, bool shifter_carry_out) {
 		uint32_t alu_out;
@@ -614,7 +636,7 @@ public:
 			st.address = Rn_value;
 		st.hasInjectedValue = false;
 		if (L && H) {
-			dumpAndAbort("LDR(S)H");
+			currentTick.pendingOperation = PENDING_OPERATION_LDRH_LDRSH;
 		} else if (!L && S) {
 			dumpAndAbort("LDRD/STRD");
 		} else if (L) {
