@@ -719,6 +719,8 @@ private:
 		enum ControlRegBits {
 			CONTROL_REG_M = 1 << 0, // MMU enabled
 			CONTROL_REG_A = 1 << 1, // strict alignment
+			CONTROL_REG_S = 1 << 8,
+			CONTROL_REG_R = 1 << 9,
 			CONTROL_REG_SBZ = 0xfc1a0000,
 			CONTROL_REG_SBO = 0x00050072,
 		};
@@ -756,6 +758,18 @@ private:
 		}
 		void write(unsigned int opcode_1, unsigned int CRn, unsigned int CRm, unsigned int opcode_2, uint32_t data) {
 			switch (CRn) {
+				case 1:
+					switch (opcode_2) {
+						case 0: // primary control register
+							data |= CONTROL_REG_SBO;
+							data &= ~CONTROL_REG_SBZ;
+							controlReg = data;
+							break;
+						default:
+							core.dumpAndAbort("CP15 unknown opcode_2");
+							break;
+					}
+					break;
 				case 2:
 					translationTableBase = data;
 					break;
