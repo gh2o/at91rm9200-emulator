@@ -52,6 +52,7 @@ public:
 		PENDING_OPERATION_NONE = 0,
 		PENDING_OPERATION_LDR_STR,
 		PENDING_OPERATION_LDM_STM,
+		PENDING_OPERATION_STRH,
 	};
 public:
 	IMX233() :
@@ -78,6 +79,9 @@ public:
 				break;
 			case PENDING_OPERATION_LDM_STM:
 				tickPendingLDMSTM();
+				break;
+			case PENDING_OPERATION_STRH:
+				tickPendingSTRH();
 				break;
 		}
 		if (currentTick.tickError != TICK_ERROR_NONE) {
@@ -425,6 +429,35 @@ public:
 			currentTick.pendingOperation = PENDING_OPERATION_NONE;
 		}
 	}
+	void tickPendingSTRH() {
+		bool errorOccurred = false;
+		auto& st = pendingOperationState.misc_ldr_str;
+		unsigned int shift = 8 * (st.address & 2);
+		uint32_t aladdr = st.address & ~2;
+		if (st.hasInjectedValue) {
+			// actually store it
+			memoryController.writeWord(aladdr, st.injectedValue, errorOccurred);
+			if (errorOccurred) {
+				currentTick.tickError = TICK_ERROR_DATA_ABORT;
+				return;
+			}
+		} else {
+			// load and inject
+			uint32_t data = memoryController.readWord(aladdr, errorOccurred);
+			if (errorOccurred) {
+				currentTick.tickError = TICK_ERROR_DATA_ABORT;
+				return;
+			}
+			data &= ~(0xFFFF << shift);
+			data |= (readRegister(st.Rd) & 0xFFFF) << shift;
+			st.hasInjectedValue = true;
+			st.injectedValue = data;
+			return;
+		}
+		if (st.writeback)
+			writeRegister(st.Rn, st.Rn_final);
+		currentTick.pendingOperation = PENDING_OPERATION_NONE;
+	}
 	void inst_DATA(unsigned int opcode, bool S,
 			unsigned int Rd, unsigned int Rn, uint32_t shifter_operand, bool shifter_carry_out) {
 		uint32_t alu_out;
@@ -579,6 +612,7 @@ public:
 			st.address = offsettedAddress;
 		else
 			st.address = Rn_value;
+		st.hasInjectedValue = false;
 		if (L && H) {
 			dumpAndAbort("LDR(S)H");
 		} else if (!L && S) {
@@ -586,7 +620,7 @@ public:
 		} else if (L) {
 			dumpAndAbort("LDRSB");
 		} else {
-			dumpAndAbort("STRH");
+			currentTick.pendingOperation = PENDING_OPERATION_STRH;
 		}
 	}
 	void inst_MCR(uint32_t cp_num, uint32_t opcode_1,
@@ -1001,6 +1035,8 @@ private:
 			unsigned int Rd;
 			uint32_t Rn_final;
 			uint32_t address;
+			bool hasInjectedValue;
+			uint32_t injectedValue;
 		} misc_ldr_str;
 	} pendingOperationState;
 };
