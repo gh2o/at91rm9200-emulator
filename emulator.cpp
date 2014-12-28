@@ -166,77 +166,61 @@ public:
 		unsigned int Rm = (encodedInst >> 0) & 0x0F;
 		switch (dec1) {
 			case 0:
-				switch (dec2) {
-					case 16:
-					case 20:
-						if (dec3 == 0) {
-							inst_MRS(
-									encodedInst & (1 << 22), /* R */
-									Rd);
-						} else {
-							dumpAndAbort("decode 0.%d unknown", dec2);
-						}
-						break;
-					case 18:
-					case 22:
-						if (dec3 == 0) {
-							uint32_t operand = readRegister(Rm);
-							inst_MSR(
-									encodedInst & (1 << 22), /* R */
-									(encodedInst >> 16) & 0x0F, /* field_mask */
-									operand);
-						} else {
-							dumpAndAbort("decode 0.%d unknown", dec2);
-						}
-						break;
-					default:
-						if ((dec3 & 0x09) != 0x09) {
-							// data processing with register
-							uint32_t shifter_operand;
-							bool shifter_carry_out;
-							decodeShifterOperand(encodedInst, &shifter_operand, &shifter_carry_out);
-							inst_DATA(
-									dec2 >> 1, /* opcode */
-									dec2 & 0x01, /* S */
-									Rd,
-									Rn,
-									shifter_operand,
-									shifter_carry_out);
-						} else if (dec3 & 0x06) {
-							bool P = encodedInst & (1 << 24);
-							bool U = encodedInst & (1 << 23);
-							bool I = encodedInst & (1 << 22);
-							bool W = encodedInst & (1 << 21);
-							bool L = encodedInst & (1 << 20);
-							bool S = encodedInst & (1 << 6);
-							bool H = encodedInst & (1 << 5);
-							if (!P && W)
-								dumpAndAbort("bad misc L/S");
-							uint32_t offset;
-							if (I)
-								offset = ((encodedInst >> 4) & 0xF0) | (encodedInst & 0x0F);
-							else
-								offset = readRegister(Rm);
-							inst_misc_LDR_STR(L, S, H, U, P, W, Rd, Rn, offset);
-						} else if ((dec2 & 0x18) == 0x08) {
-							// SMULL/SMLAL/UMULL/UMLAL
-							unsigned int RdHi = Rn;
-							unsigned int RdLo = Rd;
-							bool signedmult = encodedInst & (1 << 22);
-							bool accumulate = encodedInst & (1 << 21);
-							bool S = encodedInst & (1 << 20);
-							inst_MULL_MLAL(signedmult, accumulate, S, RdLo, RdHi, Rm, Rs);
-						} else if ((dec2 & 0x1C) == 0) {
-							// MUL/MLA
-							unsigned int mulRd = Rn;
-							unsigned int mulRn = Rd;
-							bool accumulate = encodedInst & (1 << 21);
-							bool S = encodedInst & (1 << 20);
-							inst_MUL_MLA(accumulate, S, mulRd, Rm, Rs, mulRn);
-						} else {
-							dumpAndAbort("unknown SWP or multiply");
-						}
-						break;
+				if ((dec2 & 0x1B) == 0x10 && dec3 == 0) {
+					inst_MRS(
+							encodedInst & (1 << 22), /* R */
+							Rd);
+				} else if ((dec2 & 0x1B) == 0x12 && dec3 == 0) {
+					uint32_t operand = readRegister(Rm);
+					inst_MSR(
+							encodedInst & (1 << 22), /* R */
+							(encodedInst >> 16) & 0x0F, /* field_mask */
+							operand);
+				} else if ((dec3 & 0x09) != 0x09) {
+					// data processing with register
+					uint32_t shifter_operand;
+					bool shifter_carry_out;
+					decodeShifterOperand(encodedInst, &shifter_operand, &shifter_carry_out);
+					inst_DATA(
+							dec2 >> 1, /* opcode */
+							dec2 & 0x01, /* S */
+							Rd,
+							Rn,
+							shifter_operand,
+							shifter_carry_out);
+				} else if (dec3 & 0x06) {
+					bool P = encodedInst & (1 << 24);
+					bool U = encodedInst & (1 << 23);
+					bool I = encodedInst & (1 << 22);
+					bool W = encodedInst & (1 << 21);
+					bool L = encodedInst & (1 << 20);
+					bool S = encodedInst & (1 << 6);
+					bool H = encodedInst & (1 << 5);
+					if (!P && W)
+						dumpAndAbort("bad misc L/S");
+					uint32_t offset;
+					if (I)
+						offset = ((encodedInst >> 4) & 0xF0) | (encodedInst & 0x0F);
+					else
+						offset = readRegister(Rm);
+					inst_misc_LDR_STR(L, S, H, U, P, W, Rd, Rn, offset);
+				} else if ((dec2 & 0x18) == 0x08) {
+					// SMULL/SMLAL/UMULL/UMLAL
+					unsigned int RdHi = Rn;
+					unsigned int RdLo = Rd;
+					bool signedmult = encodedInst & (1 << 22);
+					bool accumulate = encodedInst & (1 << 21);
+					bool S = encodedInst & (1 << 20);
+					inst_MULL_MLAL(signedmult, accumulate, S, RdLo, RdHi, Rm, Rs);
+				} else if ((dec2 & 0x1C) == 0) {
+					// MUL/MLA
+					unsigned int mulRd = Rn;
+					unsigned int mulRn = Rd;
+					bool accumulate = encodedInst & (1 << 21);
+					bool S = encodedInst & (1 << 20);
+					inst_MUL_MLA(accumulate, S, mulRd, Rm, Rs, mulRn);
+				} else {
+					dumpAndAbort("unknown decode 0");
 				}
 				break;
 			case 1:
