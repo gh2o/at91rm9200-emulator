@@ -1029,6 +1029,7 @@ private:
 			unsigned int desc1type = desc1 & 0x03;
 			switch (desc1type) {
 				case 0: // fault
+					fprintf(stderr, "TE invalid first level descriptor\n");
 					errorOccurred = true;
 					return 0;
 				case 2: // section
@@ -1042,6 +1043,7 @@ private:
 			// check domain
 			unsigned int domacc = (scc.domainAccess >> (domain * 2)) & 0x03;
 			if ((domacc & 0x01) == 0) { // domain fault
+				fprintf(stderr, "TE domain fault\n");
 				errorOccurred = true;
 				return 0;
 			}
