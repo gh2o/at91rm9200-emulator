@@ -9,36 +9,37 @@
 	memory { device_type = "memory"; reg = <0 0>; };
 };
 
-/* imx23 */
+/* at91rm9200 */
 / {
-	interrupt-parent = <&icoll>;
+	model = "Atmel AT91RM9200 family SoC (Emulated)";
+	compatible = "atmel,at91rm9200";
+	interrupt-parent = <&aic>;
 
 	cpus {
 		#address-cells = <0>;
 		#size-cells = <0>;
 		cpu {
-			compatible = "arm,arm926ej-s";
+			compatible = "arm,arm920t";
 			device_type = "cpu";
 		};
 	};
 
-	apb@80000000 {
+	ahb {
 		compatible = "simple-bus";
 		#address-cells = <1>;
 		#size-cells = <1>;
-		reg = <0x80000000 0x80000>;
 		ranges;
-		apbh@80000000 {
+		apb {
 			compatible = "simple-bus";
 			#address-cells = <1>;
 			#size-cells = <1>;
-			reg = <0x80000000 0x40000>;
 			ranges;
-			icoll: interrupt-controller@80000000 {
-				compatible = "fsl,imx23-icoll", "fsl,icoll";
+			aic: interrupt-controller@fffff000 {
+				#interrupt-cells = <3>;
+				compatible = "atmel,at91rm9200-aic";
 				interrupt-controller;
-				#interrupt-cells = <1>;
-				reg = <0x80000000 0x2000>;
+				reg = <0xfffff000 0x200>;
+				atmel,external-irqs = <25 26 27 28 29 30 31>;
 			};
 		};
 	};
@@ -46,9 +47,6 @@
 
 /* emulator */
 / {
-	model = "i.MX233 Emulator";
-	compatible = "fsl,imx23";
-
 	memory {
 		reg = <0x40000000 0x04000000>; /* 64 MiB */
 	};
