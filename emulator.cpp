@@ -532,6 +532,7 @@ public:
 				case 0:
 				case 8:
 				case 9:
+				case 12:
 				case 13:
 					break;
 				case 4:
