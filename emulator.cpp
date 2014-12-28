@@ -1191,6 +1191,7 @@ private:
 };
 
 class AT91RM9200Interface : public ARM920T::MemoryInterface {
+	class Peripheral;
 public:
 	static constexpr uint32_t systemMemoryBase = 0x20000000;
 public:
@@ -1221,27 +1222,65 @@ public:
 			dstBase[i] = le32toh(srcBase[i]);
 	}
 	uint32_t readWordPhysical(uint32_t addr, bool& errorOccurred) {
-		if (addr >= systemMemoryBase && addr < systemMemoryBase + systemMemorySize) {
-			return systemMemory[(addr - systemMemoryBase) / 4];
+		uint32_t *location;
+		Peripheral *peripheral;
+		getAddressTarget(addr, &location, &peripheral);
+		if (location) {
+			return *location;
+		} else if (peripheral) {
+			return peripheral->readFromAddress(addr, errorOccurred);
+		} else {
+			errorOccurred = true;
+			return 0;
 		}
-		corePtr->dumpAndAbort("readWordPhysical: %08x", addr);
 	}
 	void writeWordPhysical(uint32_t addr, uint32_t val, bool& errorOccurred) {
-		if (addr >= systemMemoryBase && addr < systemMemoryBase + systemMemorySize) {
-			systemMemory[(addr - systemMemoryBase) / 4] = val;
+		uint32_t *location;
+		Peripheral *peripheral;
+		getAddressTarget(addr, &location, &peripheral);
+		if (location) {
+			*location = val;
+		} else if (peripheral) {
+			peripheral->writeToAddress(addr, val, errorOccurred);
+		} else {
+			errorOccurred = true;
 			return;
 		}
-		corePtr->dumpAndAbort("writeWordPhysical: %08x", addr);
+	}
+	void getAddressTarget(uint32_t addr, uint32_t **location, Peripheral **peripheral) {
+		*location = nullptr;
+		*peripheral = nullptr;
+		if (((addr ^ systemMemoryBase) & (0xF << 28)) == 0) {
+			// memory access
+			uint32_t byteOffset = addr - systemMemoryBase;
+			if (byteOffset < systemMemorySize)
+				*location = &systemMemory[byteOffset / 4];
+			else
+				corePtr->dumpAndAbort("out-of-bounds memory access: %08x", addr);
+		} else if ((addr & 0xFFFFF000) == 0xFFFFF000) {
+			// system peripherals
+			corePtr->dumpAndAbort("system peripheral: %08x", addr);
+		} else {
+			corePtr->dumpAndAbort("could not interpret address: %08x", addr);
+		}
 	}
 private:
 	class Peripheral {
 	public:
-		Peripheral(AT91RM9200Interface& intf) : intf(intf) {}
+		Peripheral(AT91RM9200Interface& intf, uint32_t baseaddr)
+			: intf(intf), baseaddr(baseaddr) {}
+		uint32_t readFromAddress(uint32_t addr, bool& errorOccurred) {
+			return readRegister(addr - baseaddr, errorOccurred);
+		}
+		void writeToAddress(uint32_t addr, uint32_t val, bool& errorOccurred) {
+			return writeRegister(addr - baseaddr, val, errorOccurred);
+		}
+	protected:
 		virtual uint32_t readRegister(uint32_t addr, bool& errorOccurred) { return 0; };
 		virtual void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) {};
-	protected:
 		ARM920T& core() { return *(intf.corePtr); }
 		AT91RM9200Interface& intf;
+		uint32_t baseaddr;
 	};
 	class DBGU : public Peripheral {
 	public:
