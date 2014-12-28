@@ -1234,6 +1234,35 @@ public:
 		corePtr->dumpAndAbort("writeWordPhysical: %08x", addr);
 	}
 private:
+	class Peripheral {
+	public:
+		Peripheral(AT91RM9200Interface& intf) : intf(intf) {}
+		virtual uint32_t readRegister(uint32_t addr, bool& errorOccurred) { return 0; };
+		virtual void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) {};
+	protected:
+		ARM920T& core() { return *(intf.corePtr); }
+		AT91RM9200Interface& intf;
+	};
+	class DBGU : public Peripheral {
+	public:
+		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
+			switch (addr) {
+				case 0x14: // status register
+					return 0x0202;
+				default:
+					core().dumpAndAbort("DBGU read %02x", addr);
+					break;
+			}
+		}
+		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
+			switch (addr) {
+				default:
+					core().dumpAndAbort("DBGU write %02x", addr);
+					break;
+			}
+		}
+	};
+private:
 	ARM920T *corePtr;
 	std::unique_ptr<uint32_t[]> systemMemory;
 	uint32_t systemMemorySize = 0;
