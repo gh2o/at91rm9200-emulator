@@ -422,6 +422,9 @@ public:
 			case 10:
 				alu_out = Rn_value - shifter_operand;
 				break;
+			case 3:
+				alu_out = shifter_operand - Rn_value;
+				break;
 			case 4:
 			case 11:
 				alu_out = Rn_value + shifter_operand;
@@ -455,6 +458,7 @@ public:
 				(shifter_carry_out ? PSR_BITS_C : 0);
 			bool a, b, r = alu_out & (1 << 31);
 			switch (opcode) {
+				case 0:
 				case 8:
 				case 9:
 				case 13:
