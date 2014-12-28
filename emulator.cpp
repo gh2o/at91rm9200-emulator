@@ -142,6 +142,14 @@ public:
 				switch (dec2) {
 					case 16:
 					case 20:
+						if (dec3 == 0) {
+							inst_MRS(
+									encodedInst & (1 << 22), /* R */
+									Rd);
+						} else {
+							dumpAndAbort("decode 0.%d unknown", dec2);
+						}
+						break;
 					case 18:
 					case 22:
 						dumpAndAbort("decode 0.%d unknown", dec2);
@@ -527,6 +535,12 @@ public:
 			mask &= 0xF0000000 | 0x0000000F | 0x00000020;
 			writeSPSR((readSPSR() & ~mask) | (operand & mask));
 		}
+	}
+	void inst_MRS(bool R, unsigned int Rd) {
+		if (!R)
+			writeRegister(Rd, readCPSR());
+		else
+			writeRegister(Rd, readSPSR());
 	}
 	__attribute__((noreturn, format(printf, 2, 3)))
 	void dumpAndAbort(const char *format, ...) {
