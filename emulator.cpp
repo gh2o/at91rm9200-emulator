@@ -1267,7 +1267,12 @@ public:
 				corePtr->dumpAndAbort("out-of-bounds memory access: %08x", addr);
 		} else if ((addr & 0xFFFFF000) == 0xFFFFF000) {
 			// system peripherals
-			corePtr->dumpAndAbort("system peripheral: %08x", addr);
+			uint32_t periphId = (addr >> 8) & 0x0F;
+			Peripheral *posPeriph = systemPeripherals[periphId];
+			if (posPeriph)
+				*peripheral = posPeriph;
+			else
+				corePtr->dumpAndAbort("unknown system peripheral: %08x", periphId);
 		} else {
 			corePtr->dumpAndAbort("could not interpret address: %08x", addr);
 		}
