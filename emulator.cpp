@@ -152,7 +152,15 @@ public:
 						break;
 					case 18:
 					case 22:
-						dumpAndAbort("decode 0.%d unknown", dec2);
+						if (dec3 == 0) {
+							uint32_t operand = readRegister(Rm);
+							inst_MSR(
+									encodedInst & (1 << 22), /* R */
+									(encodedInst >> 16) & 0x0F, /* field_mask */
+									operand);
+						} else {
+							dumpAndAbort("decode 0.%d unknown", dec2);
+						}
 						break;
 					default:
 						if ((dec3 & 0x09) != 0x09) {
