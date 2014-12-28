@@ -314,19 +314,42 @@ public:
 		bool errorOccurred = false;
 		auto& st = pendingOperationState.ldr_str;
 		if (st.byte) {
+			unsigned int shift = 8 * (st.address & 3);
+			uint32_t aladdr = st.address & ~3;
 			if (st.load) {
-				uint32_t data = memoryController.readWord(st.address & ~3, errorOccurred);
+				// LDRB
+				uint32_t data = memoryController.readWord(aladdr, errorOccurred);
 				if (errorOccurred) {
 					currentTick.tickError = TICK_ERROR_DATA_ABORT;
 					return;
 				}
-				unsigned int shift = 8 * (st.address & 3);
 				writeRegister(st.Rd, (data >> shift) & 0xFF);
 			} else {
-				dumpAndAbort("STRB not implemented");
+				// STRB
+				if (st.hasInjectedValue) {
+					// actually store it
+					memoryController.writeWord(aladdr, st.injectedValue, errorOccurred);
+					if (errorOccurred) {
+						currentTick.tickError = TICK_ERROR_DATA_ABORT;
+						return;
+					}
+				} else {
+					// load and inject
+					uint32_t data = memoryController.readWord(st.address, errorOccurred);
+					if (errorOccurred) {
+						currentTick.tickError = TICK_ERROR_DATA_ABORT;
+						return;
+					}
+					data &= ~(0xFF << shift);
+					data |= (readRegister(st.Rd) & 0xFF) << shift;
+					st.hasInjectedValue = true;
+					st.injectedValue = data;
+					return;
+				}
 			}
 		} else {
 			if (st.load) {
+				// LDR
 				uint32_t data = memoryController.readWord(st.address, errorOccurred);
 				if (errorOccurred) {
 					currentTick.tickError = TICK_ERROR_DATA_ABORT;
@@ -334,6 +357,7 @@ public:
 				}
 				writeRegister(st.Rd, data);
 			} else {
+				// STR
 				uint32_t data = readRegister(st.Rd);
 				memoryController.writeWord(st.address, data, errorOccurred);
 				if (errorOccurred) {
@@ -488,6 +512,7 @@ public:
 			st.address = offsettedAddress;
 		else
 			st.address = Rn_value;
+		st.hasInjectedValue = false;
 		if (!P && W)
 			dumpAndAbort("LDRT/STRT not implemented");
 	}
