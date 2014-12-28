@@ -1197,6 +1197,14 @@ public:
 public:
 	void reset(ARM920T& core) {
 		corePtr = &core;
+		// clear
+		peripheralBank.clear();
+		std::fill(std::begin(systemPeripherals), std::end(systemPeripherals), nullptr);
+		// rebuild
+		auto *dbgu = new DBGU(*this, 0xFFFFF200);
+		peripheralBank.push_back(std::unique_ptr<Peripheral>(dbgu));
+		systemPeripherals[2] = dbgu;
+		systemPeripherals[3] = dbgu;
 	}
 	void allocateSystemMemory(uint32_t size) {
 		systemMemory.reset(new uint32_t[size / 4 + 1]);
@@ -1284,6 +1292,7 @@ private:
 	};
 	class DBGU : public Peripheral {
 	public:
+		using Peripheral::Peripheral;
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
 				case 0x14: // status register
@@ -1305,6 +1314,8 @@ private:
 	ARM920T *corePtr;
 	std::unique_ptr<uint32_t[]> systemMemory;
 	uint32_t systemMemorySize = 0;
+	std::vector<std::unique_ptr<Peripheral>> peripheralBank;
+	Peripheral *systemPeripherals[16];
 };
 
 std::vector<char> readFileToVector(const char *path) {
