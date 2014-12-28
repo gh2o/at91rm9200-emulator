@@ -91,7 +91,7 @@ public:
 	void tickExecute() {
 		bool errorOccurred = false;
 		// fetch instruction
-		uint32_t encodedInst = memoryController.readWord(getPC(), &errorOccurred);
+		uint32_t encodedInst = memoryController.readWord(getPC(), errorOccurred);
 		if (errorOccurred) {
 			currentTick.tickError = TICK_ERROR_PREFETCH_ABORT;
 			return;
@@ -294,7 +294,7 @@ public:
 		if (st.byte)
 			dumpAndAbort("LDRB/STRB not implemented");
 		if (st.load) {
-			uint32_t data = memoryController.readWord(st.address, &errorOccurred);
+			uint32_t data = memoryController.readWord(st.address, errorOccurred);
 			if (errorOccurred) {
 				currentTick.tickError = TICK_ERROR_DATA_ABORT;
 				return;
@@ -302,7 +302,7 @@ public:
 			writeRegister(st.Rd, data);
 		} else {
 			uint32_t data = readRegister(st.Rd);
-			memoryController.writeWord(st.address, data, &errorOccurred);
+			memoryController.writeWord(st.address, data, errorOccurred);
 			if (errorOccurred) {
 				currentTick.tickError = TICK_ERROR_DATA_ABORT;
 				return;
@@ -319,7 +319,7 @@ public:
 			dumpAndAbort("STM not implemented");
 		if (st.special)
 			dumpAndAbort("LDM/STM special not implemented");
-		uint32_t value = memoryController.readWord(st.address, &errorOccurred);
+		uint32_t value = memoryController.readWord(st.address, errorOccurred);
 		if (errorOccurred) {
 			currentTick.tickError = TICK_ERROR_DATA_ABORT;
 			return;
@@ -530,7 +530,7 @@ public:
 			fprintf(stderr, "r%d = %08x\n", i, readRegister(i));
 		uint32_t pc = getPC();
 		bool err = false;
-		fprintf(stderr, "pc = %08x (%08x)\n", pc, memoryController.readWord(pc, &err));
+		fprintf(stderr, "pc = %08x (%08x)\n", pc, memoryController.readWord(pc, err));
 		// goodbye
 		abort();
 	}
@@ -688,36 +688,36 @@ private:
 	public:
 		MemoryController(IMX233& core) : core(core) {}
 		void reset() {}
-		uint32_t readWord(uint32_t addr, bool *errorOccurred) {
+		uint32_t readWord(uint32_t addr, bool& errorOccurred) {
 			if (addr & 3)
 				core.dumpAndAbort("readWord unaligned");
 			addr = translateAddress(addr, errorOccurred);
-			if (*errorOccurred)
+			if (errorOccurred)
 				return 0;
 			return readWordPhysical(addr, errorOccurred);
 		}
-		void writeWord(uint32_t addr, uint32_t val, bool *errorOccurred) {
+		void writeWord(uint32_t addr, uint32_t val, bool& errorOccurred) {
 			if (addr & 3)
 				core.dumpAndAbort("writeWord unaligned");
 			addr = translateAddress(addr, errorOccurred);
-			if (*errorOccurred)
+			if (errorOccurred)
 				return;
 			writeWordPhysical(addr, val, errorOccurred);
 		}
-		uint32_t readWordPhysical(uint32_t addr, bool *errorOccurred) {
+		uint32_t readWordPhysical(uint32_t addr, bool& errorOccurred) {
 			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize) {
 				return core.systemMemory[(addr - systemMemoryBase) / 4];
 			}
 			core.dumpAndAbort("readWordPhysical");
 		}
-		void writeWordPhysical(uint32_t addr, uint32_t val, bool *errorOccurred) {
+		void writeWordPhysical(uint32_t addr, uint32_t val, bool& errorOccurred) {
 			if (addr >= core.systemMemoryBase && addr < core.systemMemoryBase + core.systemMemorySize) {
 				core.systemMemory[(addr - systemMemoryBase) / 4] = val;
 				return;
 			}
 			core.dumpAndAbort("writeWordPhysical");
 		}
-		uint32_t translateAddress(uint32_t addr, bool *errorOccurred) {
+		uint32_t translateAddress(uint32_t addr, bool& errorOccurred) {
 			uint32_t creg = core.systemControlCoprocessor.controlReg;
 			if (!(creg & SystemControlCoprocessor::CONTROL_REG_M))
 				return addr;
