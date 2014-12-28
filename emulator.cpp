@@ -747,6 +747,19 @@ public:
 					dumpAndAbort("LSR bad shift %u", shift_imm);
 				}
 				break;
+			case 2: // ASR
+				if (!is_reg && shift_imm == 0)
+					shift_imm = 32;
+				if (shift_imm < 32) {
+					bool sign = *shifter_operand & (1 << 31);
+					*shifter_carry_out = *shifter_operand & (1 << (shift_imm - 1));
+					*shifter_operand >>= shift_imm;
+					if (sign)
+						*shifter_operand |= 0xFFFFFFFF << (32 - shift_imm);
+				} else {
+					dumpAndAbort("ASR bad shift %u", shift_imm);
+				}
+				break;
 			default:
 				dumpAndAbort("unknown shift type %d", shift_type);
 				break;
