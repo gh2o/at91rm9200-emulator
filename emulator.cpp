@@ -156,6 +156,7 @@ public:
 		unsigned int dec3 = (encodedInst >> 4) & 0x0F;
 		unsigned int Rn = (encodedInst >> 16) & 0x0F;
 		unsigned int Rd = (encodedInst >> 12) & 0x0F;
+		unsigned int Rs = (encodedInst >> 8) & 0x0F;
 		unsigned int Rm = (encodedInst >> 0) & 0x0F;
 		switch (dec1) {
 			case 0:
@@ -211,6 +212,14 @@ public:
 							else
 								offset = readRegister(Rm);
 							inst_misc_LDR_STR(L, S, H, U, P, W, Rd, Rn, offset);
+						} else if ((dec2 & 0x18) == 0x08) {
+							// SMULL/SMLAL/UMULL/UMLAL
+							unsigned int RdHi = Rn;
+							unsigned int RdLo = Rd;
+							bool signedmult = encodedInst & (1 << 22);
+							bool accumulate = encodedInst & (1 << 21);
+							bool S = encodedInst & (1 << 20);
+							inst_MULL_MLAL(signedmult, accumulate, S, RdLo, RdHi, Rm, Rs);
 						} else {
 							dumpAndAbort("unknown SWP or multiply");
 						}
@@ -570,6 +579,33 @@ public:
 		}
 		if ((opcode & 0x0C) != 0x08)
 			writeRegister(Rd, alu_out);
+	}
+	void inst_MULL_MLAL(bool signedmult, bool accumulate, bool S,
+			unsigned int RdLo, unsigned int RdHi,
+			unsigned int Rm, unsigned int Rs) {
+		uint32_t RdLo_value = readRegister(RdLo);
+		uint32_t RdHi_value = readRegister(RdHi);
+		uint32_t Rm_value = readRegister(Rm);
+		uint32_t Rs_value = readRegister(Rs);
+		uint64_t adj = 0;
+		if (signedmult) {
+			if (Rm_value & (1 << 31))
+				adj += Rs_value;
+			if (Rs_value & (1 << 31))
+				adj += Rm_value;
+		}
+		uint64_t res = (uint64_t)Rm_value * (uint64_t)Rs_value - (adj << 32);
+		if (accumulate)
+			res += (uint64_t)RdHi_value << 32 | (uint64_t)RdLo_value;
+		writeRegister(RdLo, res);
+		writeRegister(RdHi, res >> 32);
+		if (S) {
+			uint32_t newCPSR =
+				(readCPSR() & ~(PSR_BITS_N | PSR_BITS_Z)) |
+				(res & (1ULL << 63) ? PSR_BITS_N : 0) |
+				(res == 0 ? PSR_BITS_Z : 0);
+			writeCPSR(newCPSR);
+		}
 	}
 	void inst_B_BL(bool L, uint32_t signed_immed_24) {
 		if (L)
