@@ -20,7 +20,7 @@ static inline uint32_t rotateRight(uint32_t val, uint32_t count) {
 class IMX233 {
 	struct TickState;
 public:
-	static constexpr uint32_t systemMemoryBase = 0x40000000;
+	static constexpr uint32_t systemMemoryBase = 0x20000000;
 	enum CPUMode {
 		CPU_MODE_USER = 0x10,
 		CPU_MODE_FIQ = 0x11,
