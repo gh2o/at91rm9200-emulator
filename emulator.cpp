@@ -564,10 +564,16 @@ public:
 						((!a & !b & r) | (a & b & !r) ? PSR_BITS_V : 0);
 					break;
 				case 2:
+				case 3:
 				case 6:
 				case 10:
-					a = Rn_value & (1 << 31);
-					b = shifter_operand & (1 << 31);
+					if (opcode == 3) {
+						a = shifter_operand & (1 << 31);
+						b = Rn_value & (1 << 31);
+					} else {
+						a = Rn_value & (1 << 31);
+						b = shifter_operand & (1 << 31);
+					}
 					newCPSR =
 						(newCPSR & ~(PSR_BITS_C | PSR_BITS_V)) |
 						((a & !b) | (a & !r) | (!b & !r) ? PSR_BITS_C : 0) |
