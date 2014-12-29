@@ -1223,8 +1223,10 @@ private:
 			CONTROL_REG_A = 1 << 1, // strict alignment
 			CONTROL_REG_S = 1 << 8,
 			CONTROL_REG_R = 1 << 9,
+			CONTROL_REG_V = 1 << 13, // high exception vectors
 			CONTROL_REG_SBZ = 0xfc1a0000,
 			CONTROL_REG_SBO = 0x00050072,
+			CONTROL_REG_SUPPORTED = 0x2303
 		};
 	public:
 		SystemControlCoprocessor(ARM920T& core) : core(core) {}
@@ -1266,6 +1268,8 @@ private:
 							data |= CONTROL_REG_SBO;
 							data &= ~CONTROL_REG_SBZ;
 							controlReg = data;
+							if (data & ~(CONTROL_REG_SBZ | CONTROL_REG_SBO | CONTROL_REG_SUPPORTED))
+								core.dumpAndAbort("unsupported bits set in control register");
 							break;
 						default:
 							core.dumpAndAbort("CP15 unknown opcode_2");
