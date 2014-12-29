@@ -1528,6 +1528,12 @@ private:
 				return sourceVectors[(addr & 0x7F) / 4];
 			} else {
 				switch (addr) {
+					case 0x100:
+						fprintf(stderr, "TODO: read from interrupt vector\n");
+						return spuriousVector;
+					case 0x108:
+						fprintf(stderr, "TODO: read from interrupt status\n");
+						return 0;
 					default:
 						core().dumpAndAbort("AIC read %02x", addr);
 						break;
@@ -1556,7 +1562,7 @@ private:
 						fprintf(stderr, "TODO: write to EOICR (%08x)\n", val);
 						break;
 					case 0x134:
-						fprintf(stderr, "TODO: write to SIQV (spurious IRQ vector) (%08x)\n", val);
+						spuriousVector = val;
 						break;
 					case 0x138:
 						fprintf(stderr, "TODO: write to DCR (debug) (%08x)\n", val);
@@ -1578,6 +1584,7 @@ private:
 		uint32_t assertedInterrupts;
 		uint32_t sourceModes[32];
 		uint32_t sourceVectors[32];
+		uint32_t spuriousVector;
 	};
 	class ST : public Peripheral {
 		static constexpr uint64_t ONE_BILLION = 1000000000ULL;
