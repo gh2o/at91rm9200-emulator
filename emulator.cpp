@@ -1351,6 +1351,10 @@ public:
 		peripheralBank.push_back(std::unique_ptr<Peripheral>(dbgu));
 		systemPeripherals[2] = dbgu;
 		systemPeripherals[3] = dbgu;
+		auto *aic = new AIC(*this, 0xFFFFF000);
+		peripheralBank.push_back(std::unique_ptr<Peripheral>(aic));
+		systemPeripherals[0] = aic;
+		systemPeripherals[1] = aic;
 	}
 	void allocateSystemMemory(uint32_t size) {
 		systemMemory.reset(new uint32_t[size / 4 + 1]);
@@ -1466,6 +1470,24 @@ private:
 					break;
 				default:
 					core().dumpAndAbort("DBGU write %02x", addr);
+					break;
+			}
+		}
+	};
+	class AIC : public Peripheral {
+	public:
+		using Peripheral::Peripheral;
+		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
+			switch (addr) {
+				default:
+					core().dumpAndAbort("AIC read %02x", addr);
+					break;
+			}
+		}
+		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
+			switch (addr) {
+				default:
+					core().dumpAndAbort("AIC write %02x", addr);
 					break;
 			}
 		}
