@@ -1029,7 +1029,6 @@ private:
 			if (!(scc.controlReg & SCC::CONTROL_REG_M))
 				return addr;
 			// should be set
-			unsigned int domain;
 			uint32_t newaddr;
 			// first level walk
 			uint32_t desc1addr =
@@ -1045,14 +1044,16 @@ private:
 					errorOccurred = true;
 					return 0;
 				case 2: // section
-					domain = (desc1 >> 5) & 0xF;
 					newaddr = (desc1 & 0xFFF00000) | (addr & 0x000FFFFF);
 					break;
 				default:
-					core.dumpAndAbort("unsupported level 1 type %d\n", desc1type);
+					newaddr = translateLevel2(addr, desc1, errorOccurred);
+					if (errorOccurred)
+						return 0;
 					break;
 			}
 			// check domain
+			unsigned int domain = (desc1 >> 5) & 0xF;
 			unsigned int domacc = (scc.domainAccess >> (domain * 2)) & 0x03;
 			if ((domacc & 0x01) == 0) { // domain fault
 				fprintf(stderr, "TE domain fault\n");
@@ -1066,6 +1067,32 @@ private:
 			}
 			// done!
 			return newaddr;
+		}
+		uint32_t translateLevel2(uint32_t addr, uint32_t desc1, bool& errorOccurred) {
+			uint32_t desc2addr;
+			if ((desc1 & 0x03) == 0x03) {
+				// fine page table
+				core.dumpAndAbort("fine page table");
+			} else {
+				desc2addr =
+					(desc1 & 0xFFFFFC00) |
+					((addr >> 10) & 0x03FC);
+			}
+			uint32_t desc2 = readWordPhysical(desc2addr, errorOccurred);
+			if (errorOccurred)
+				return 0;
+			unsigned int desc2type = desc2 & 0x03;
+			switch (desc2type) {
+				case 0: // fault
+					fprintf(stderr, "TE invalid second level descriptor\n");
+					errorOccurred = true;
+					return 0;
+				case 2: // small pages
+					return (desc2 & 0xFFFFF000) | (addr & 0x0FFF);
+				default:
+					core.dumpAndAbort("unsupported desc2 type %u", desc2type);
+					break;
+			}
 		}
 	private:
 		ARM920T& core;
