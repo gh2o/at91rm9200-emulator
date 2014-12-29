@@ -998,13 +998,18 @@ private:
 		uint32_t *curSPSRView;
 	};
 	class MemoryController {
+		enum PermCheck {
+			PERM_CHECK_NONE,
+			PERM_CHECK_READ,
+			PERM_CHECK_WRITE
+		};
 	public:
 		MemoryController(ARM920T& core) : core(core) {}
 		void reset() {}
 		uint32_t readWord(uint32_t addr, bool& errorOccurred) {
 			if (addr & 3)
 				core.dumpAndAbort("readWord unaligned");
-			addr = translateAddress(addr, errorOccurred);
+			addr = translateAddress(addr, PERM_CHECK_READ, errorOccurred);
 			if (errorOccurred)
 				return 0;
 			return readWordPhysical(addr, errorOccurred);
@@ -1012,7 +1017,7 @@ private:
 		void writeWord(uint32_t addr, uint32_t val, bool& errorOccurred) {
 			if (addr & 3)
 				core.dumpAndAbort("writeWord unaligned");
-			addr = translateAddress(addr, errorOccurred);
+			addr = translateAddress(addr, PERM_CHECK_WRITE, errorOccurred);
 			if (errorOccurred)
 				return;
 			writeWordPhysical(addr, val, errorOccurred);
@@ -1023,13 +1028,14 @@ private:
 		void writeWordPhysical(uint32_t addr, uint32_t val, bool& errorOccurred) {
 			core.memoryInterface.writeWordPhysical(addr, val, errorOccurred);
 		}
-		uint32_t translateAddress(uint32_t addr, bool& errorOccurred) {
+		uint32_t translateAddress(uint32_t addr, PermCheck pcheck, bool& errorOccurred) {
 			auto& scc = core.systemControlCoprocessor;
 			typedef SystemControlCoprocessor SCC;
 			if (!(scc.controlReg & SCC::CONTROL_REG_M))
 				return addr;
 			// should be set
 			uint32_t newaddr;
+			uint32_t apbits;
 			// first level walk
 			uint32_t desc1addr =
 				(scc.translationTableBase & 0xFFFFC000) |
@@ -1045,9 +1051,10 @@ private:
 					return 0;
 				case 2: // section
 					newaddr = (desc1 & 0xFFF00000) | (addr & 0x000FFFFF);
+					apbits = (desc1 >> 10) & 3;
 					break;
 				default:
-					newaddr = translateLevel2(addr, desc1, errorOccurred);
+					newaddr = translateLevel2(addr, desc1, &apbits, errorOccurred);
 					if (errorOccurred)
 						return 0;
 					break;
@@ -1062,13 +1069,41 @@ private:
 			}
 			// check permissions if required
 			if (domacc == 1) {
-				// client domain
-				core.dumpAndAbort("client domain");
+				bool AP1 = apbits & 2;
+				bool AP0 = apbits & 1;
+				bool S = scc.controlReg & SCC::CONTROL_REG_S;
+				bool R = scc.controlReg & SCC::CONTROL_REG_R;
+				bool isPrivileged = core.isPrivileged();
+				bool accessAllowed;
+				switch (pcheck) {
+					case PERM_CHECK_NONE:
+						accessAllowed = true;
+						break;
+					case PERM_CHECK_READ:
+						if (isPrivileged)
+							accessAllowed = S | R | AP1 | AP0;
+						else
+							accessAllowed = AP1 | (R & !AP0);
+						break;
+					case PERM_CHECK_WRITE:
+						if (isPrivileged)
+							accessAllowed = AP1 | AP0;
+						else
+							accessAllowed = AP1 & AP0;
+						break;
+				}
+				if (!accessAllowed)
+					core.dumpAndAbort("denied access to addr %08x -> %08x", addr, newaddr);
 			}
 			// done!
 			return newaddr;
 		}
-		uint32_t translateLevel2(uint32_t addr, uint32_t desc1, bool& errorOccurred) {
+		uint32_t translateLevel2(uint32_t addr, uint32_t desc1,
+				uint32_t *apbitsPtr, bool& errorOccurred) {
+			// should be set
+			uint32_t newaddr;
+			unsigned int subpage;
+			// second level walk
 			uint32_t desc2addr;
 			if ((desc1 & 0x03) == 0x03) {
 				// fine page table
@@ -1088,11 +1123,16 @@ private:
 					errorOccurred = true;
 					return 0;
 				case 2: // small pages
-					return (desc2 & 0xFFFFF000) | (addr & 0x0FFF);
+					newaddr = (desc2 & 0xFFFFF000) | (addr & 0x0FFF);
+					subpage = (addr >> 10) & 3;
+					break;
 				default:
 					core.dumpAndAbort("unsupported desc2 type %u", desc2type);
 					break;
 			}
+			// done!
+			*apbitsPtr = (desc2 >> (4 + 2 * subpage)) & 3;
+			return newaddr;
 		}
 	private:
 		ARM920T& core;
