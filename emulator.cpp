@@ -605,6 +605,7 @@ public:
 			bool a, b, r = alu_out & (1 << 31);
 			switch (opcode) {
 				case 0:
+				case 1:
 				case 8:
 				case 9:
 				case 12:
