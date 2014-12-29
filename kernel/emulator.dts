@@ -66,6 +66,6 @@
 /* overridden */
 / {
 	chosen {
-		bootargs = "earlyprintk";
+		bootargs = "earlyprintk keep_bootcon";
 	};
 };
