@@ -635,6 +635,7 @@ public:
 				case 14:
 					break;
 				case 4:
+				case 5:
 				case 11:
 					a = Rn_value & (1 << 31);
 					b = shifter_operand & (1 << 31);
