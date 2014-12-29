@@ -56,6 +56,7 @@ public:
 		PENDING_OPERATION_LDM_STM,
 		PENDING_OPERATION_STRH,
 		PENDING_OPERATION_LDRH_LDRSH,
+		PENDING_OPERATION_SWP_SWPB,
 	};
 public:
 	ARM920T(MemoryInterface& mi) :
@@ -90,6 +91,9 @@ public:
 				break;
 			case PENDING_OPERATION_LDRH_LDRSH:
 				tickPendingLDRHLDRSH();
+				break;
+			case PENDING_OPERATION_SWP_SWPB:
+				tickPendingSWPSWPB();
 				break;
 		}
 		if (currentTick.tickError != TICK_ERROR_NONE) {
@@ -202,6 +206,10 @@ public:
 						bool accumulate = encodedInst & (1 << 21);
 						bool S = encodedInst & (1 << 20);
 						inst_MUL_MLA(accumulate, S, mulRd, Rm, Rs, mulRn);
+					} else if ((dec2 & 0x1B) == 0x10) {
+						// SWP/SWPB
+						bool byte = encodedInst & (1 << 22);
+						inst_SWP_SWPB(byte, Rd, Rm, Rn);
 					} else {
 						dumpAndAbort("unknown decode 0a.[%d].[%d]", dec2, dec3);
 					}
@@ -513,6 +521,30 @@ public:
 			writeRegister(st.Rn, st.Rn_final);
 		currentTick.pendingOperation = PENDING_OPERATION_NONE;
 	}
+	void tickPendingSWPSWPB() {
+		bool errorOccurred = false;
+		auto& st = pendingOperationState.swp_swpb;
+		if (st.byte)
+			dumpAndAbort("SWPB not implemented");
+		if (!st.hasTemp) {
+			st.hasTemp = true;
+			st.temp = memoryController.readWord(st.address, errorOccurred);
+			if (errorOccurred) {
+				currentTick.tickError = TICK_ERROR_DATA_ABORT;
+				return;
+			}
+			return;
+		} else {
+			uint32_t Rm_value = readRegister(st.Rm);
+			memoryController.writeWord(st.address, Rm_value, errorOccurred);
+			if (errorOccurred) {
+				currentTick.tickError = TICK_ERROR_DATA_ABORT;
+				return;
+			}
+			writeRegister(st.Rd, st.temp);
+		}
+		currentTick.pendingOperation = PENDING_OPERATION_NONE;
+	}
 	void inst_DATA(unsigned int opcode, bool S,
 			unsigned int Rd, unsigned int Rn, uint32_t shifter_operand, bool shifter_carry_out) {
 		uint32_t alu_out;
@@ -748,6 +780,16 @@ public:
 		} else {
 			currentTick.pendingOperation = PENDING_OPERATION_STRH;
 		}
+	}
+	void inst_SWP_SWPB(bool byte,
+			unsigned int Rd, unsigned int Rm, unsigned int Rn) {
+		currentTick.pendingOperation = PENDING_OPERATION_SWP_SWPB;
+		auto& st = pendingOperationState.swp_swpb;
+		st.byte = byte;
+		st.Rd = Rd;
+		st.Rm = Rm;
+		st.address = readRegister(Rn);
+		st.hasTemp = false;
 	}
 	void inst_MCR(uint32_t cp_num, uint32_t opcode_1,
 			unsigned int Rd, unsigned int CRn, unsigned int CRm, unsigned int opcode_2) {
@@ -1259,6 +1301,14 @@ private:
 			bool hasInjectedValue;
 			uint32_t injectedValue;
 		} misc_ldr_str;
+		struct {
+			bool byte;
+			unsigned int Rd;
+			unsigned int Rm;
+			uint32_t address;
+			bool hasTemp;
+			uint32_t temp;
+		} swp_swpb;
 	} pendingOperationState;
 };
 
