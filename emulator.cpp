@@ -956,7 +956,9 @@ public:
 				break;
 			case 3:
 				if (!is_reg && shift_imm == 0) { // RRX
-					dumpAndAbort("RRX");
+					bool c_flag = *shifter_carry_out;
+					*shifter_carry_out = *shifter_operand & (1 << 0);
+					*shifter_operand = (c_flag ? (1 << 31) : 0) | (*shifter_operand >> 1);
 				} else { // ROR
 					uint32_t rotate_amt = shift_imm & 0x1F;
 					if (shift_imm == 0) {
