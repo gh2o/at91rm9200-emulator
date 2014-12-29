@@ -1532,6 +1532,9 @@ private:
 		using Peripheral::Peripheral;
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x10:
+					fprintf(stderr, "TODO: ST read from SR (status)\n");
+					return 0;
 				default:
 					core().dumpAndAbort("ST read %02x", addr);
 					break;
@@ -1539,6 +1542,9 @@ private:
 		}
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x18:
+					fprintf(stderr, "TODO: ST write to IDR (int disable) (%08x)\n", val);
+					break;
 				default:
 					core().dumpAndAbort("ST write %02x (%08x)", addr, val);
 					break;
