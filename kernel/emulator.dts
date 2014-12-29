@@ -66,6 +66,6 @@
 /* overridden */
 / {
 	chosen {
-		bootargs = "earlyprintk keep_bootcon";
+		bootargs = "earlyprintk keep_bootcon console=ttyS0";
 	};
 };
