@@ -1546,6 +1546,9 @@ private:
 		}
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x0C:
+					realTimeDivider = val & 0xFFFF;
+					break;
 				case 0x18:
 					fprintf(stderr, "TODO: ST write to IDR (int disable) (%08x)\n", val);
 					break;
@@ -1554,6 +1557,8 @@ private:
 					break;
 			}
 		}
+	private:
+		uint32_t realTimeDivider = 0x8000;
 	};
 private:
 	ARM920T *corePtr;
