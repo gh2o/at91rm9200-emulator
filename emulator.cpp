@@ -1479,11 +1479,7 @@ private:
 	};
 	class AIC : public Peripheral {
 	public:
-		AIC(AT91RM9200Interface& intf, uint32_t baseaddr)
-				: Peripheral(intf, baseaddr) {
-			std::fill(std::begin(sourceModes), std::end(sourceModes), 0);
-			std::fill(std::begin(sourceVectors), std::end(sourceVectors), 0);
-		}
+		using Peripheral::Peripheral;
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			if ((addr & ~0x7F) == 0x00) {
 				return sourceModes[(addr & 0x7F) / 4];
@@ -1528,8 +1524,8 @@ private:
 			}
 		}
 	private:
-		uint32_t sourceModes[32];
-		uint32_t sourceVectors[32];
+		uint32_t sourceModes[32] = {0};
+		uint32_t sourceVectors[32] = {0};
 	};
 	class ST : public Peripheral {
 	public:
