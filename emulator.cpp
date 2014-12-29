@@ -1027,6 +1027,7 @@ private:
 		}
 		void reset() {
 			writeCPSR(CPU_MODE_SVC | PSR_BITS_F | PSR_BITS_I);
+			std::fill(std::begin(storedSPSR), std::end(storedSPSR), 0);
 		}
 		uint32_t readCPSR() {
 			return curCPSR;
