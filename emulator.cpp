@@ -624,53 +624,56 @@ public:
 				break;
 		}
 		if (S) {
-			if (Rd == 15)
-				dumpAndAbort("Rd15 data and S not supported");
-			uint32_t newCPSR =
-				(readCPSR() & ~(PSR_BITS_N | PSR_BITS_Z | PSR_BITS_C)) |
-				(alu_out & PSR_BITS_N) |
-				(alu_out == 0 ? PSR_BITS_Z : 0) |
-				(shifter_carry_out ? PSR_BITS_C : 0);
-			bool a, b, r = alu_out & (1 << 31);
-			switch (opcode) {
-				case 0:
-				case 1:
-				case 8:
-				case 9:
-				case 12:
-				case 13:
-				case 14:
-					break;
-				case 4:
-				case 5:
-				case 11:
-					a = Rn_value & (1 << 31);
-					b = shifter_operand & (1 << 31);
-					newCPSR =
-						(newCPSR & ~(PSR_BITS_C | PSR_BITS_V)) |
-						((a & b) | (a & !r) | (b & !r) ? PSR_BITS_C : 0) |
-						((!a & !b & r) | (a & b & !r) ? PSR_BITS_V : 0);
-					break;
-				case 2:
-				case 3:
-				case 6:
-				case 7:
-				case 10:
-					if (opcode == 3 || opcode == 7) {
-						a = shifter_operand & (1 << 31);
-						b = Rn_value & (1 << 31);
-					} else {
+			uint32_t newCPSR;
+			if (Rd == 15) {
+				newCPSR = readSPSR();
+			} else {
+				newCPSR =
+					(readCPSR() & ~(PSR_BITS_N | PSR_BITS_Z | PSR_BITS_C)) |
+					(alu_out & PSR_BITS_N) |
+					(alu_out == 0 ? PSR_BITS_Z : 0) |
+					(shifter_carry_out ? PSR_BITS_C : 0);
+				bool a, b, r = alu_out & (1 << 31);
+				switch (opcode) {
+					case 0:
+					case 1:
+					case 8:
+					case 9:
+					case 12:
+					case 13:
+					case 14:
+						break;
+					case 4:
+					case 5:
+					case 11:
 						a = Rn_value & (1 << 31);
 						b = shifter_operand & (1 << 31);
-					}
-					newCPSR =
-						(newCPSR & ~(PSR_BITS_C | PSR_BITS_V)) |
-						((a & !b) | (a & !r) | (!b & !r) ? PSR_BITS_C : 0) |
-						((!a & b & r) | (a & !b & !r) ? PSR_BITS_V : 0);
-					break;
-				default:
-					dumpAndAbort("data opcode %u S unimplemented", opcode);
-					break;
+						newCPSR =
+							(newCPSR & ~(PSR_BITS_C | PSR_BITS_V)) |
+							((a & b) | (a & !r) | (b & !r) ? PSR_BITS_C : 0) |
+							((!a & !b & r) | (a & b & !r) ? PSR_BITS_V : 0);
+						break;
+					case 2:
+					case 3:
+					case 6:
+					case 7:
+					case 10:
+						if (opcode == 3 || opcode == 7) {
+							a = shifter_operand & (1 << 31);
+							b = Rn_value & (1 << 31);
+						} else {
+							a = Rn_value & (1 << 31);
+							b = shifter_operand & (1 << 31);
+						}
+						newCPSR =
+							(newCPSR & ~(PSR_BITS_C | PSR_BITS_V)) |
+							((a & !b) | (a & !r) | (!b & !r) ? PSR_BITS_C : 0) |
+							((!a & b & r) | (a & !b & !r) ? PSR_BITS_V : 0);
+						break;
+					default:
+						dumpAndAbort("data opcode %u S unimplemented", opcode);
+						break;
+				}
 			}
 			writeCPSR(newCPSR);
 		}
