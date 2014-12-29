@@ -1476,17 +1476,31 @@ private:
 	};
 	class AIC : public Peripheral {
 	public:
-		using Peripheral::Peripheral;
+		AIC(AT91RM9200Interface& intf, uint32_t baseaddr)
+				: Peripheral(intf, baseaddr) {
+			std::fill(std::begin(sourceModes), std::end(sourceModes), 0);
+			std::fill(std::begin(sourceVectors), std::end(sourceVectors), 0);
+		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
-			switch (addr) {
-				default:
-					core().dumpAndAbort("AIC read %02x", addr);
-					break;
+			if ((addr & ~0x7F) == 0x00) {
+				return sourceModes[(addr & 0x7F) / 4];
+			} else if ((addr & ~0x7F) == 0x80) {
+				return sourceVectors[(addr & 0x7F) / 4];
+			} else {
+				switch (addr) {
+					default:
+						core().dumpAndAbort("AIC read %02x", addr);
+						break;
+				}
 			}
 		}
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
-			if ((addr & ~0x7F) == 0x80) {
+			if ((addr & ~0x7F) == 0x00) {
+				fprintf(stderr, "TODO: write to SMR%d (%08x)\n", (addr & 0x7F) / 4, val);
+				sourceModes[(addr & 0x7F) / 4] = val;
+			} else if ((addr & ~0x7F) == 0x80) {
 				fprintf(stderr, "TODO: write to SVR%d (%08x)\n", (addr & 0x7F) / 4, val);
+				sourceVectors[(addr & 0x7F) / 4] = val;
 			} else {
 				switch (addr) {
 					case 0x124:
@@ -1510,6 +1524,9 @@ private:
 				}
 			}
 		}
+	private:
+		uint32_t sourceModes[32];
+		uint32_t sourceVectors[32];
 	};
 private:
 	ARM920T *corePtr;
