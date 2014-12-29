@@ -1502,8 +1502,11 @@ private:
 				sourceVectors[(addr & 0x7F) / 4] = val;
 			} else {
 				switch (addr) {
+					case 0x120:
+						enabledInterrupts |= val;
+						break;
 					case 0x124:
-						fprintf(stderr, "TODO: write to interrupt disable (%08x)\n", val);
+						enabledInterrupts &= ~val;
 						break;
 					case 0x128:
 						fprintf(stderr, "TODO: write to interrupt clear (%08x)\n", val);
@@ -1524,6 +1527,7 @@ private:
 			}
 		}
 	private:
+		uint32_t enabledInterrupts = 0;
 		uint32_t sourceModes[32] = {0};
 		uint32_t sourceVectors[32] = {0};
 	};
