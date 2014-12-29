@@ -1425,6 +1425,29 @@ public:
 		}
 	}
 private:
+	class SystemInterrupt {
+	public:
+		// IRQ line 1
+		enum InterruptSource {
+			INTERRUPT_SOURCE_SYSTEM_CLOCK,
+		};
+		SystemInterrupt(AT91RM9200Interface& intf) : intf(intf) {}
+		void setInterruptState(InterruptSource src, bool val) {
+			if (val) {
+				bool shouldAssert = !assertedSources;
+				assertedSources |= 1 << src;
+				if (shouldAssert)
+					intf.interruptController.setInterruptState(1, true);
+			} else {
+				assertedSources &= ~(1 << src);
+				if (!assertedSources)
+					intf.interruptController.setInterruptState(1, false);
+			}
+		}
+	private:
+		AT91RM9200Interface& intf;
+		uint32_t assertedSources;
+	};
 	class Peripheral {
 	public:
 		Peripheral(AT91RM9200Interface& intf, uint32_t baseaddr)
@@ -1526,8 +1549,15 @@ private:
 				}
 			}
 		}
+		void setInterruptState(unsigned int irq, bool state) {
+			if (state)
+				assertedInterrupts |= 1 << irq;
+			else
+				assertedInterrupts &= ~(1 << irq);
+		}
 	private:
 		uint32_t enabledInterrupts;
+		uint32_t assertedInterrupts;
 		uint32_t sourceModes[32];
 		uint32_t sourceVectors[32];
 	};
