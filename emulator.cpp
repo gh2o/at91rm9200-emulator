@@ -1485,10 +1485,29 @@ private:
 			}
 		}
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
-			switch (addr) {
-				default:
-					core().dumpAndAbort("AIC write %02x", addr);
-					break;
+			if ((addr & ~0x7F) == 0x80) {
+				fprintf(stderr, "TODO: write to SVR%d (%08x)\n", (addr & 0x7F) / 4, val);
+			} else {
+				switch (addr) {
+					case 0x124:
+						fprintf(stderr, "TODO: write to interrupt disable (%08x)\n", val);
+						break;
+					case 0x128:
+						fprintf(stderr, "TODO: write to interrupt clear (%08x)\n", val);
+						break;
+					case 0x130:
+						fprintf(stderr, "TODO: write to EOICR (%08x)\n", val);
+						break;
+					case 0x134:
+						fprintf(stderr, "TODO: write to SIQV (spurious IRQ vector) (%08x)\n", val);
+						break;
+					case 0x138:
+						fprintf(stderr, "TODO: write to DCR (debug) (%08x)\n", val);
+						break;
+					default:
+						core().dumpAndAbort("AIC write %02x", addr);
+						break;
+				}
 			}
 		}
 	};
