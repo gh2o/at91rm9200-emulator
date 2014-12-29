@@ -60,10 +60,6 @@ public:
 		PENDING_OPERATION_LDRSB,
 		PENDING_OPERATION_SWP_SWPB,
 	};
-	enum AssertedInterrupt {
-		ASSERTED_INTERRUPT_IRQ,
-		ASSERTED_INTERRUPT_FIQ,
-	};
 public:
 	ARM920T(MemoryInterface& mi) :
 			memoryInterface(mi) {
@@ -109,6 +105,14 @@ public:
 		}
 		if (currentTick.pendingOperation == PENDING_OPERATION_NONE) {
 			currentTick.curPC = registerFile.getProgramCounter();
+			// process interrupts
+			uint32_t curCPSR = readCPSR();
+			uint32_t intBits = assertedInterrupts & ~curCPSR;
+			if (intBits & PSR_BITS_F) {
+				dumpAndAbort("FIQ abort");
+			} else if (intBits & PSR_BITS_I) {
+				dumpAndAbort("IRQ abort");
+			}
 		}
 	}
 	void tickExecute() {
