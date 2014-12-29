@@ -1534,6 +1534,7 @@ private:
 		uint32_t sourceVectors[32] = {0};
 	};
 	class ST : public Peripheral {
+		static constexpr uint64_t ONE_BILLION = 1000000000ULL;
 	public:
 		using Peripheral::Peripheral;
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
@@ -1541,6 +1542,9 @@ private:
 				case 0x10:
 					fprintf(stderr, "TODO: ST read from SR (status)\n");
 					return 0;
+				case 0x24:
+					updateCounter(false);
+					return realTimeCounter & 0x0FFFFF;
 				default:
 					core().dumpAndAbort("ST read %02x", addr);
 					break;
@@ -1549,7 +1553,12 @@ private:
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
 			switch (addr) {
 				case 0x0C:
+					updateCounter(true);
 					realTimeDivider = val & 0xFFFF;
+					if (realTimeDivider == 0)
+						nanosPerTick = 2 * ONE_BILLION;
+					else
+						nanosPerTick = realTimeDivider * ONE_BILLION / 0x8000;
 					break;
 				case 0x18:
 					fprintf(stderr, "TODO: ST write to IDR (int disable) (%08x)\n", val);
@@ -1559,8 +1568,34 @@ private:
 					break;
 			}
 		}
+		void updateCounter(bool flushPartials) {
+			struct timespec nowTime = getTime();
+			uint64_t elapsedNanos = (nowTime.tv_sec - lastUpdated.tv_sec) * ONE_BILLION +
+				(nowTime.tv_nsec - lastUpdated.tv_nsec);
+			uint32_t tickIncrement = elapsedNanos / nanosPerTick;
+			realTimeCounter += tickIncrement;
+			if (flushPartials) {
+				lastUpdated = nowTime;
+			} else {
+				uint64_t registeredNanos = tickIncrement * nanosPerTick;
+				lastUpdated.tv_sec += registeredNanos / ONE_BILLION;
+				lastUpdated.tv_nsec += registeredNanos % ONE_BILLION;
+				if (lastUpdated.tv_nsec >= (long int)ONE_BILLION) {
+					lastUpdated.tv_sec += 1;
+					lastUpdated.tv_nsec -= ONE_BILLION;
+				}
+			}
+		}
 	private:
+		uint64_t nanosPerTick = ONE_BILLION;
 		uint32_t realTimeDivider = 0x8000;
+		uint32_t realTimeCounter = 0;
+		struct timespec lastUpdated = getTime();
+		static struct timespec getTime() {
+			struct timespec res;
+			clock_gettime(CLOCK_MONOTONIC, &res);
+			return res;
+		}
 	};
 private:
 	ARM920T *corePtr;
