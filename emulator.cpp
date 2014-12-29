@@ -891,6 +891,9 @@ public:
 		// dump info
 		for (int i = 0; i < 15; i++)
 			fprintf(stderr, "r%d = %08x\n", i, readRegister(i));
+		fprintf(stderr, "cpsr = %08x\n", readCPSR());
+		if (readCPSR() & 0xF)
+			fprintf(stderr, "spsr = %08x\n", readSPSR());
 	}
 	__attribute__((noreturn, format(printf, 2, 3)))
 	void dumpAndAbort(const char *format, ...) {
