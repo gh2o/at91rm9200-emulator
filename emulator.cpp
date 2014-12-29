@@ -108,10 +108,15 @@ public:
 			// process interrupts
 			uint32_t curCPSR = readCPSR();
 			uint32_t intBits = assertedInterrupts & ~curCPSR;
-			if (intBits & PSR_BITS_F) {
-				dumpAndAbort("FIQ abort");
-			} else if (intBits & PSR_BITS_I) {
-				dumpAndAbort("IRQ abort");
+			if (intBits) {
+				bool V = systemControlCoprocessor.controlReg &
+					SystemControlCoprocessor::CONTROL_REG_V;
+				if (intBits & PSR_BITS_F)
+					dumpAndAbort("FIQ unsupported");
+				writeCPSR((curCPSR & ~PSR_BITS_MODE) | CPU_MODE_IRQ | PSR_BITS_I);
+				writeSPSR(curCPSR);
+				writeRegister(14, currentTick.curPC + 4);
+				setPC(V ? 0xFFFF0018 : 0x18);
 			}
 		}
 	}
@@ -1308,6 +1313,7 @@ private:
 		uint32_t controlReg;
 		uint32_t domainAccess;
 		uint32_t translationTableBase;
+		friend class ARM920T;
 		friend class MemoryController;
 	};
 private:
