@@ -543,6 +543,9 @@ public:
 			case 6:
 				alu_out = Rn_value - shifter_operand - !(readCPSR() & PSR_BITS_C);
 				break;
+			case 7:
+				alu_out = shifter_operand - Rn_value - !(readCPSR() & PSR_BITS_C);
+				break;
 			case 12:
 				alu_out = Rn_value | shifter_operand;
 				break;
@@ -574,6 +577,7 @@ public:
 				case 9:
 				case 12:
 				case 13:
+				case 14:
 					break;
 				case 4:
 				case 11:
@@ -587,8 +591,9 @@ public:
 				case 2:
 				case 3:
 				case 6:
+				case 7:
 				case 10:
-					if (opcode == 3) {
+					if (opcode == 3 || opcode == 7) {
 						a = shifter_operand & (1 << 31);
 						b = Rn_value & (1 << 31);
 					} else {
