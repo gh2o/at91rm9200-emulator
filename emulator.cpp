@@ -1649,6 +1649,10 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	// disable buffering on streams
+	setvbuf(stdout, nullptr, _IONBF, 0);
+	setvbuf(stderr, nullptr, _IONBF, 0);
+
 	// initialize interface
 	AT91RM9200Interface interface;
 	interface.allocateSystemMemory(64 * 1024 * 1024);
