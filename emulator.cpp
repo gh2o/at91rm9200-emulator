@@ -1552,6 +1552,9 @@ private:
 		}
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x04:
+					periodInterval = val & 0xFFFF;
+					break;
 				case 0x0C:
 					updateCounter(true);
 					realTimeDivider = val & 0xFFFF;
@@ -1592,6 +1595,7 @@ private:
 	private:
 		uint32_t enabledInterrupts = 0;
 		uint64_t nanosPerTick = ONE_BILLION;
+		uint32_t periodInterval = 0;
 		uint32_t realTimeDivider = 0x8000;
 		uint32_t realTimeCounter = 0;
 		struct timespec lastUpdated = getTime();
