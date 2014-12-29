@@ -1349,12 +1349,15 @@ public:
 		// rebuild
 		auto *dbgu = new DBGU(*this, 0xFFFFF200);
 		peripheralBank.push_back(std::unique_ptr<Peripheral>(dbgu));
-		systemPeripherals[2] = dbgu;
-		systemPeripherals[3] = dbgu;
+		systemPeripherals[0x2] = dbgu;
+		systemPeripherals[0x3] = dbgu;
 		auto *aic = new AIC(*this, 0xFFFFF000);
 		peripheralBank.push_back(std::unique_ptr<Peripheral>(aic));
-		systemPeripherals[0] = aic;
-		systemPeripherals[1] = aic;
+		systemPeripherals[0x0] = aic;
+		systemPeripherals[0x1] = aic;
+		auto *st = new ST(*this, 0xFFFFFD00);
+		peripheralBank.push_back(std::unique_ptr<Peripheral>(st));
+		systemPeripherals[0xD] = st;
 	}
 	void allocateSystemMemory(uint32_t size) {
 		systemMemory.reset(new uint32_t[size / 4 + 1]);
@@ -1527,6 +1530,24 @@ private:
 	private:
 		uint32_t sourceModes[32];
 		uint32_t sourceVectors[32];
+	};
+	class ST : public Peripheral {
+	public:
+		using Peripheral::Peripheral;
+		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
+			switch (addr) {
+				default:
+					core().dumpAndAbort("ST read %02x", addr);
+					break;
+			}
+		}
+		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
+			switch (addr) {
+				default:
+					core().dumpAndAbort("ST write %02x (%08x)", addr, val);
+					break;
+			}
+		}
 	};
 private:
 	ARM920T *corePtr;
