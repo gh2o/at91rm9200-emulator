@@ -1343,23 +1343,18 @@ class AT91RM9200Interface : public ARM920T::MemoryInterface {
 public:
 	static constexpr uint32_t systemMemoryBase = 0x20000000;
 public:
+	AT91RM9200Interface() {
+		systemPeripherals[0x0] = &interruptController;
+		systemPeripherals[0x1] = &interruptController;
+		systemPeripherals[0x2] = &debugUnit;
+		systemPeripherals[0x3] = &debugUnit;
+		systemPeripherals[0xD] = &systemTimer;
+	}
 	void reset(ARM920T& core) {
 		corePtr = &core;
-		// clear
-		peripheralBank.clear();
-		std::fill(std::begin(systemPeripherals), std::end(systemPeripherals), nullptr);
-		// rebuild
-		auto *dbgu = new DBGU(*this, 0xFFFFF200);
-		peripheralBank.push_back(std::unique_ptr<Peripheral>(dbgu));
-		systemPeripherals[0x2] = dbgu;
-		systemPeripherals[0x3] = dbgu;
-		auto *aic = new AIC(*this, 0xFFFFF000);
-		peripheralBank.push_back(std::unique_ptr<Peripheral>(aic));
-		systemPeripherals[0x0] = aic;
-		systemPeripherals[0x1] = aic;
-		auto *st = new ST(*this, 0xFFFFFD00);
-		peripheralBank.push_back(std::unique_ptr<Peripheral>(st));
-		systemPeripherals[0xD] = st;
+		for (int i = 0; i < 16; i++)
+			if (systemPeripherals[i])
+				systemPeripherals[i]->reset();
 	}
 	void allocateSystemMemory(uint32_t size) {
 		systemMemory.reset(new uint32_t[size / 4 + 1]);
@@ -1443,6 +1438,7 @@ private:
 		void writeToAddress(uint32_t addr, uint32_t val, bool& errorOccurred) {
 			return writeRegister(addr - baseaddr, val, errorOccurred);
 		}
+		virtual void reset() {}
 	protected:
 		virtual uint32_t readRegister(uint32_t addr, bool& errorOccurred) { return 0; };
 		virtual void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) {};
@@ -1482,6 +1478,11 @@ private:
 	class AIC : public Peripheral {
 	public:
 		using Peripheral::Peripheral;
+		void reset() override {
+			enabledInterrupts = 0;
+			std::fill(std::begin(sourceModes), std::end(sourceModes), 0);
+			std::fill(std::begin(sourceVectors), std::end(sourceVectors), 0);
+		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			if ((addr & ~0x7F) == 0x00) {
 				return sourceModes[(addr & 0x7F) / 4];
@@ -1529,14 +1530,22 @@ private:
 			}
 		}
 	private:
-		uint32_t enabledInterrupts = 0;
-		uint32_t sourceModes[32] = {0};
-		uint32_t sourceVectors[32] = {0};
+		uint32_t enabledInterrupts;
+		uint32_t sourceModes[32];
+		uint32_t sourceVectors[32];
 	};
 	class ST : public Peripheral {
 		static constexpr uint64_t ONE_BILLION = 1000000000ULL;
 	public:
 		using Peripheral::Peripheral;
+		void reset() override {
+			enabledInterrupts = 0;
+			nanosPerTick = ONE_BILLION;
+			periodInterval = 0;
+			realTimeDivider = 0x8000;
+			realTimeCounter = 0;
+			lastUpdated = getTime();
+		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
 				case 0x10:
@@ -1593,12 +1602,13 @@ private:
 			}
 		}
 	private:
-		uint32_t enabledInterrupts = 0;
-		uint64_t nanosPerTick = ONE_BILLION;
-		uint32_t periodInterval = 0;
-		uint32_t realTimeDivider = 0x8000;
-		uint32_t realTimeCounter = 0;
-		struct timespec lastUpdated = getTime();
+		uint32_t enabledInterrupts;
+		uint64_t nanosPerTick;
+		uint32_t periodInterval;
+		uint32_t realTimeDivider;
+		uint32_t realTimeCounter;
+		struct timespec lastUpdated;
+	private:
 		static struct timespec getTime() {
 			struct timespec res;
 			clock_gettime(CLOCK_MONOTONIC, &res);
@@ -1609,8 +1619,10 @@ private:
 	ARM920T *corePtr;
 	std::unique_ptr<uint32_t[]> systemMemory;
 	uint32_t systemMemorySize = 0;
-	std::vector<std::unique_ptr<Peripheral>> peripheralBank;
-	Peripheral *systemPeripherals[16];
+	Peripheral *systemPeripherals[16] = { nullptr };
+	AIC interruptController{*this, 0xFFFFF000};
+	DBGU debugUnit{*this, 0xFFFFF200};
+	ST systemTimer{*this, 0xFFFFFD00};
 };
 
 std::vector<char> readFileToVector(const char *path) {
