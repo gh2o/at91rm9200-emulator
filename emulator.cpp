@@ -449,7 +449,7 @@ public:
 	void tickPendingLDMSTM() {
 		bool errorOccurred = false;
 		auto& st = pendingOperationState.ldm_stm;
-		if (st.special)
+		if (st.special && !st.restoreCPSR)
 			dumpAndAbort("LDM/STM special not implemented");
 		unsigned int Rd;
 		if (st.up)
@@ -482,6 +482,8 @@ public:
 		if (!st.register_list) {
 			if (st.writeback)
 				writeRegister(st.Rn, st.Rn_final);
+			if (st.restoreCPSR)
+				writeCPSR(readSPSR());
 			currentTick.pendingOperation = PENDING_OPERATION_NONE;
 		}
 	}
@@ -771,6 +773,7 @@ public:
 		st.special = S;
 		st.up = U;
 		st.writeback = W;
+		st.restoreCPSR = L && S && (register_list & (1 << 15));
 		st.Rn = Rn;
 		st.register_list = register_list;
 		uint32_t Rn_value = readRegister(Rn);
@@ -1316,6 +1319,7 @@ private:
 			bool special;
 			bool up;
 			bool writeback;
+			bool restoreCPSR;
 			unsigned int Rn;
 			uint32_t register_list;
 			uint32_t Rn_final;
