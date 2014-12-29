@@ -61,10 +61,7 @@ public:
 	};
 public:
 	ARM920T(MemoryInterface& mi) :
-			memoryInterface(mi),
-			registerFile(*this),
-			memoryController(*this),
-			systemControlCoprocessor(*this) {
+			memoryInterface(mi) {
 		reset();
 	}
 	void reset() {
@@ -1291,9 +1288,9 @@ private:
 	};
 private:
 	MemoryInterface& memoryInterface;
-	RegisterFile registerFile;
-	MemoryController memoryController;
-	SystemControlCoprocessor systemControlCoprocessor;
+	RegisterFile registerFile{*this};
+	MemoryController memoryController{*this};
+	SystemControlCoprocessor systemControlCoprocessor{*this};
 	TickState currentTick;
 	union {
 		struct {
