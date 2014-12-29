@@ -12,6 +12,7 @@
 #include <vector>
 #include <memory>
 #include <thread>
+#include <atomic>
 
 static inline uint32_t rotateRight(uint32_t val, uint32_t count) {
 	return (val >> count) | (val << (32 - count));
@@ -59,6 +60,10 @@ public:
 		PENDING_OPERATION_LDRSB,
 		PENDING_OPERATION_SWP_SWPB,
 	};
+	enum AssertedInterrupt {
+		ASSERTED_INTERRUPT_IRQ,
+		ASSERTED_INTERRUPT_FIQ,
+	};
 public:
 	ARM920T(MemoryInterface& mi) :
 			memoryInterface(mi) {
@@ -70,6 +75,7 @@ public:
 		memoryController.reset();
 		systemControlCoprocessor.reset();
 		currentTick.reset();
+		assertedInterrupts = 0;
 	}
 	void tick() {
 		switch (currentTick.pendingOperation) {
@@ -1292,6 +1298,7 @@ private:
 	MemoryController memoryController{*this};
 	SystemControlCoprocessor systemControlCoprocessor{*this};
 	TickState currentTick;
+	std::atomic<unsigned int> assertedInterrupts;
 	union {
 		struct {
 			bool load;
