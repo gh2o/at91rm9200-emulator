@@ -1199,10 +1199,10 @@ private:
 					domainAccess = data;
 					break;
 				case 7:
-					fprintf(stderr, "TODO: cache management (CRn=7)\n");
+					// TODO: cache management
 					break;
 				case 8:
-					fprintf(stderr, "TODO: TLB management (CRn=8)\n");
+					// TODO: TLB management
 					break;
 				default:
 					core.dumpAndAbort("CP15 unknown register write %d", CRn);
