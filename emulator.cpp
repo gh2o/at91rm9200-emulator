@@ -1158,7 +1158,7 @@ private:
 				case 0: // ID codes
 					switch (opcode_2) {
 						case 0: // Main ID register
-							return 0x41039200;
+							return 0x41129201;
 						default:
 							core.dumpAndAbort("CP15 unknown opcode_2");
 							break;
