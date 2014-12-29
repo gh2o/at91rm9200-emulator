@@ -56,6 +56,7 @@ public:
 		PENDING_OPERATION_LDM_STM,
 		PENDING_OPERATION_STRH,
 		PENDING_OPERATION_LDRH_LDRSH,
+		PENDING_OPERATION_LDRSB,
 		PENDING_OPERATION_SWP_SWPB,
 	};
 public:
@@ -91,6 +92,9 @@ public:
 				break;
 			case PENDING_OPERATION_LDRH_LDRSH:
 				tickPendingLDRHLDRSH();
+				break;
+			case PENDING_OPERATION_LDRSB:
+				tickPendingLDRSB();
 				break;
 			case PENDING_OPERATION_SWP_SWPB:
 				tickPendingSWPSWPB();
@@ -521,6 +525,24 @@ public:
 			writeRegister(st.Rn, st.Rn_final);
 		currentTick.pendingOperation = PENDING_OPERATION_NONE;
 	}
+	void tickPendingLDRSB() {
+		bool errorOccurred = false;
+		auto& st = pendingOperationState.misc_ldr_str;
+		unsigned int shift = 8 * (st.address & 3);
+		uint32_t aladdr = st.address & ~3;
+		uint32_t data = memoryController.readWord(aladdr, errorOccurred);
+		if (errorOccurred) {
+			currentTick.tickError = TICK_ERROR_DATA_ABORT;
+			return;
+		}
+		data = (data >> shift) & 0xFF;
+		if (data & 0x80)
+			data |= ~0xFF;
+		writeRegister(st.Rd, data);
+		if (st.writeback)
+			writeRegister(st.Rn, st.Rn_final);
+		currentTick.pendingOperation = PENDING_OPERATION_NONE;
+	}
 	void tickPendingSWPSWPB() {
 		bool errorOccurred = false;
 		auto& st = pendingOperationState.swp_swpb;
@@ -777,7 +799,7 @@ public:
 		} else if (!L && S) {
 			dumpAndAbort("LDRD/STRD");
 		} else if (L) {
-			dumpAndAbort("LDRSB");
+			currentTick.pendingOperation = PENDING_OPERATION_LDRSB;
 		} else {
 			currentTick.pendingOperation = PENDING_OPERATION_STRH;
 		}
