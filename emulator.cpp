@@ -846,24 +846,24 @@ public:
 		}
 	}
 	void inst_MSR(bool R, uint32_t field_mask, uint32_t operand) {
+		constexpr uint32_t USER_BITS = 0xF0000000;
+		constexpr uint32_t PRIV_BITS = 0x000000DF;
 		uint32_t mask =
 			((field_mask & (1 << 0)) ? 0x000000FF : 0) |
 			((field_mask & (1 << 1)) ? 0x0000FF00 : 0) |
 			((field_mask & (1 << 2)) ? 0x00FF0000 : 0) |
 			((field_mask & (1 << 3)) ? 0xFF000000 : 0);
-		if (operand & 0x0FFFFF00)
-			dumpAndAbort("MSR: attempted to set reserved bits");
+		if (operand & ~(USER_BITS | PRIV_BITS))
+			dumpAndAbort("MSR: attempted to set reserved bits (%08x)", operand);
 		if (!R) {
 			if (isPrivileged()) {
-				if (operand & 0x00000020)
-					dumpAndAbort("MSR: attempted to set non-ARM execution state");
-				mask &= 0xF0000000 | 0x0000000F;
+				mask &= USER_BITS | PRIV_BITS;
 			} else {
-				mask &= 0xF0000000;
+				mask &= USER_BITS;
 			}
 			writeCPSR((readCPSR() & ~mask) | (operand & mask));
 		} else {
-			mask &= 0xF0000000 | 0x0000000F | 0x00000020;
+			mask &= USER_BITS | PRIV_BITS;
 			writeSPSR((readSPSR() & ~mask) | (operand & mask));
 		}
 	}
