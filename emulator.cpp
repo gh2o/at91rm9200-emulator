@@ -1560,8 +1560,11 @@ private:
 					else
 						nanosPerTick = realTimeDivider * ONE_BILLION / 0x8000;
 					break;
+				case 0x14:
+					enabledInterrupts |= val;
+					break;
 				case 0x18:
-					fprintf(stderr, "TODO: ST write to IDR (int disable) (%08x)\n", val);
+					enabledInterrupts &= ~val;
 					break;
 				default:
 					core().dumpAndAbort("ST write %02x (%08x)", addr, val);
@@ -1587,6 +1590,7 @@ private:
 			}
 		}
 	private:
+		uint32_t enabledInterrupts = 0;
 		uint64_t nanosPerTick = ONE_BILLION;
 		uint32_t realTimeDivider = 0x8000;
 		uint32_t realTimeCounter = 0;
