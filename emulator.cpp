@@ -13,6 +13,7 @@
 #include <memory>
 #include <thread>
 #include <atomic>
+#include <chrono>
 
 static inline uint32_t rotateRight(uint32_t val, uint32_t count) {
 	return (val >> count) | (val << (32 - count));
@@ -1602,6 +1603,9 @@ private:
 	};
 	class ST : public Peripheral {
 		static constexpr uint64_t ONE_BILLION = 1000000000ULL;
+		typedef std::chrono::duration<int64_t, std::ratio<1, 32768>> slow_ticks;
+		typedef std::chrono::steady_clock time_clock;
+		typedef std::chrono::time_point<time_clock> time_point;
 	public:
 		using Peripheral::Peripheral;
 		void reset() override {
@@ -1610,7 +1614,7 @@ private:
 			periodInterval = 0;
 			realTimeDivider = 0x8000;
 			realTimeCounter = 0;
-			lastUpdated = getTime();
+			lastUpdated = time_clock::now();
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
@@ -1650,21 +1654,14 @@ private:
 			}
 		}
 		void updateCounter(bool flushPartials) {
-			struct timespec nowTime = getTime();
-			uint64_t elapsedNanos = (nowTime.tv_sec - lastUpdated.tv_sec) * ONE_BILLION +
-				(nowTime.tv_nsec - lastUpdated.tv_nsec);
-			uint32_t tickIncrement = elapsedNanos / nanosPerTick;
-			realTimeCounter += tickIncrement;
+			using std::chrono::duration_cast;
+			time_point nowTime = time_clock::now();
+			slow_ticks elapsedTicks = duration_cast<slow_ticks>(nowTime - lastUpdated);
+			realTimeCounter += elapsedTicks.count();
 			if (flushPartials) {
 				lastUpdated = nowTime;
 			} else {
-				uint64_t registeredNanos = tickIncrement * nanosPerTick;
-				lastUpdated.tv_sec += registeredNanos / ONE_BILLION;
-				lastUpdated.tv_nsec += registeredNanos % ONE_BILLION;
-				if (lastUpdated.tv_nsec >= (long int)ONE_BILLION) {
-					lastUpdated.tv_sec += 1;
-					lastUpdated.tv_nsec -= ONE_BILLION;
-				}
+				lastUpdated += duration_cast<time_point::duration>(elapsedTicks);
 			}
 		}
 	private:
@@ -1673,13 +1670,7 @@ private:
 		uint32_t periodInterval;
 		uint32_t realTimeDivider;
 		uint32_t realTimeCounter;
-		struct timespec lastUpdated;
-	private:
-		static struct timespec getTime() {
-			struct timespec res;
-			clock_gettime(CLOCK_MONOTONIC, &res);
-			return res;
-		}
+		time_point lastUpdated;
 	};
 private:
 	ARM920T *corePtr;
