@@ -21,6 +21,14 @@ static inline uint32_t rotateRight(uint32_t val, uint32_t count) {
 	return (val >> count) | (val << (32 - count));
 }
 
+static inline int leftMostBit(unsigned int val) {
+	return (sizeof(unsigned int) * 8 - 1) - __builtin_clz(val);
+}
+
+static inline int rightMostBit(unsigned int val) {
+	return __builtin_ctz(val);
+}
+
 class ARM920T {
 public:
 	struct MemoryInterface;
@@ -458,9 +466,9 @@ public:
 			dumpAndAbort("LDM/STM special not implemented");
 		unsigned int Rd;
 		if (st.up)
-			Rd = __builtin_ctz(st.register_list);
+			Rd = rightMostBit(st.register_list);
 		else
-			Rd = 31 - __builtin_clz(st.register_list);
+			Rd = leftMostBit(st.register_list);
 		if (st.load) {
 			uint32_t value = memoryController.readWord(st.address, errorOccurred);
 			if (errorOccurred) {
