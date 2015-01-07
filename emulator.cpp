@@ -1160,12 +1160,15 @@ private:
 				(scc.translationTableBase & 0xFFFFC000) |
 				((addr >> 18) & 0x3FFC);
 			uint32_t desc1 = readWordPhysical(desc1addr, errorOccurred);
-			if (errorOccurred)
+			if (errorOccurred) {
+				recordFault(addr, 0xC, 0);
 				return 0;
+			}
 			unsigned int desc1type = desc1 & 0x03;
+			unsigned int domain = (desc1 >> 5) & 0xF;
 			switch (desc1type) {
 				case 0: // fault
-					fprintf(stderr, "TE invalid first level descriptor\n");
+					recordFault(addr, 0x5, domain);
 					errorOccurred = true;
 					return 0;
 				case 2: // section
@@ -1173,16 +1176,15 @@ private:
 					apbits = (desc1 >> 10) & 3;
 					break;
 				default:
-					newaddr = translateLevel2(addr, desc1, &apbits, errorOccurred);
+					newaddr = translateLevel2(addr, desc1, domain, &apbits, errorOccurred);
 					if (errorOccurred)
 						return 0;
 					break;
 			}
 			// check domain
-			unsigned int domain = (desc1 >> 5) & 0xF;
 			unsigned int domacc = (scc.domainAccess >> (domain * 2)) & 0x03;
 			if ((domacc & 0x01) == 0) { // domain fault
-				fprintf(stderr, "TE domain fault\n");
+				recordFault(addr, desc1type == 2 ? 0x9 : 0xB, domain);
 				errorOccurred = true;
 				return 0;
 			}
@@ -1217,7 +1219,7 @@ private:
 			// done!
 			return newaddr;
 		}
-		uint32_t translateLevel2(uint32_t addr, uint32_t desc1,
+		uint32_t translateLevel2(uint32_t addr, uint32_t desc1, unsigned int domain,
 				uint32_t *apbitsPtr, bool& errorOccurred) {
 			// should be set
 			uint32_t newaddr;
@@ -1233,12 +1235,14 @@ private:
 					((addr >> 10) & 0x03FC);
 			}
 			uint32_t desc2 = readWordPhysical(desc2addr, errorOccurred);
-			if (errorOccurred)
+			if (errorOccurred) {
+				recordFault(addr, 0xE, domain);
 				return 0;
+			}
 			unsigned int desc2type = desc2 & 0x03;
 			switch (desc2type) {
 				case 0: // fault
-					fprintf(stderr, "TE invalid second level descriptor\n");
+					recordFault(addr, 0x7, domain);
 					errorOccurred = true;
 					return 0;
 				case 2: // small pages
@@ -1252,6 +1256,11 @@ private:
 			// done!
 			*apbitsPtr = (desc2 >> (4 + 2 * subpage)) & 3;
 			return newaddr;
+		}
+		void recordFault(uint32_t addr, uint32_t status, uint32_t domain) {
+			auto& scc = core.systemControlCoprocessor;
+			scc.faultStatus = (domain << 4) | status;
+			scc.faultAddress = addr;
 		}
 	private:
 		ARM920T& core;
@@ -1337,6 +1346,8 @@ private:
 		uint32_t controlReg;
 		uint32_t domainAccess;
 		uint32_t translationTableBase;
+		uint32_t faultStatus;
+		uint32_t faultAddress;
 		friend class ARM920T;
 		friend class MemoryController;
 	};
