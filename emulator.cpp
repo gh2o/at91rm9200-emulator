@@ -1539,6 +1539,8 @@ private:
 			edgeStatus = 0;
 			std::fill(std::begin(sourceModes), std::end(sourceModes), 0);
 			std::fill(std::begin(sourceVectors), std::end(sourceVectors), 0);
+			std::fill(std::begin(priorityMasks), std::end(priorityMasks), 0);
+			priorityMasks[0] = -1u;
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			if ((addr & ~0xFF) == 0x00) {
@@ -1567,7 +1569,9 @@ private:
 				if (addr & 0x80) {
 					sourceVectors[irq] = val;
 				} else {
+					priorityMasks[sourceModes[irq] & 0x7] &= ~(1 << irq);
 					sourceModes[irq] = val & 0x67;
+					priorityMasks[sourceModes[irq] & 0x7] |= 1 << irq;
 					if (val & (1 << 5))
 						edgeMask |= 1 << irq;
 					else
@@ -1637,6 +1641,7 @@ private:
 		uint32_t edgeStatus;
 		uint32_t sourceModes[32];
 		uint32_t sourceVectors[32];
+		uint32_t priorityMasks[8];
 		uint32_t spuriousVector;
 	};
 	class ST : public Peripheral {
