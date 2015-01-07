@@ -1738,6 +1738,7 @@ private:
 				case 0x0C:
 					updateRealTimeCounter(true);
 					realTimeDivider = val & 0xFFFF;
+					updateAlarmMatchMark(alarmValue);
 					break;
 				case 0x14:
 					if (val & ~ST_IRQ_ALL)
@@ -1750,11 +1751,7 @@ private:
 					emitInterruptState();
 					break;
 				case 0x20:
-					{
-						std::unique_lock<std::mutex> lock(timerThreadMutex);
-						alarmValue = val & 0xFFFF;
-						timerThreadSignal.notify_all();
-					}
+					updateAlarmMatchMark(val & 0xFFFF);
 					break;
 				default:
 					core().dumpAndAbort("ST write %02x (%08x)", addr, val);
@@ -1776,6 +1773,13 @@ private:
 			else
 				realTimeLastUpdated += slow_ticks(realTimeIncrement * actualDivider);
 		}
+		void updateAlarmMatchMark(uint32_t newAlarmValue) {
+			std::unique_lock<std::mutex> lock(timerThreadMutex);
+			alarmValue = newAlarmValue;
+			alarmMatchMark = realTimeLastUpdated +
+				slow_ticks((alarmValue - realTimeCounter) & 0x0FFFFF);
+			timerThreadSignal.notify_all();
+		}
 		void emitInterruptState() {
 			intf.systemInterrupt.setInterruptState(
 					SystemInterrupt::INTERRUPT_SOURCE_SYSTEM_CLOCK,
@@ -1784,24 +1788,31 @@ private:
 		void timerLoop() {
 			using std::chrono::time_point_cast;
 			std::unique_lock<std::mutex> lock(timerThreadMutex);
+			slow_point nowTime = slowPointNow();
 			while (true) {
-				slow_point nowTime = slowPointNow();
 				if (periodIntervalMark < nowTime) {
 					uint32_t periodsPassed = (nowTime - periodIntervalMark) / periodDuration;
-					periodIntervalMark += (periodsPassed + 1) * periodDuration;
+					periodIntervalMark += periodsPassed * periodDuration;
 				}
-				if (interruptStatus & ST_IRQ_PITS) {
+				if (interruptStatus == ST_IRQ_ALL) {
 					// wait until further notice
 					timerThreadSignal.wait(lock);
 				} else {
-					// recalculate next period interrupt
-					auto st = timerThreadSignal.wait_until(lock,
-							time_point_cast<time_clock::duration>(periodIntervalMark));
-					if (st == std::cv_status::timeout) {
-						interruptStatus |= ST_IRQ_PITS;
-						periodIntervalMark += periodDuration;
-						emitInterruptState();
-					}
+					// wait until next
+					slow_point nextMark = std::min({periodIntervalMark, alarmMatchMark});
+					timerThreadSignal.wait_until(lock,
+							time_point_cast<time_clock::duration>(nextMark));
+				}
+				nowTime = slowPointNow();
+				if (nowTime >= periodIntervalMark) {
+					interruptStatus |= ST_IRQ_PITS;
+					periodIntervalMark += periodDuration;
+					emitInterruptState();
+				}
+				if (nowTime >= alarmMatchMark) {
+					interruptStatus |= ST_IRQ_ALMS;
+					alarmMatchMark += (1 << 20) * 
+					emitInterruptState();
 				}
 			}
 		}
