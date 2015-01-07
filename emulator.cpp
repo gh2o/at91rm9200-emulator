@@ -1695,9 +1695,8 @@ private:
 		void reset() override {
 			enabledInterrupts = 0;
 			interruptStatus = 0;
-			periodInterval = 0;
 			periodDuration = slow_ticks(65536);
-			alarmValue = 0;
+			alarmValue = 1048576;
 			realTimeDivider = 0x8000;
 			realTimeCounter = 0;
 			realTimeLastUpdated = slowPointNow();
@@ -1729,15 +1728,16 @@ private:
 				case 0x04:
 					{
 						std::unique_lock<std::mutex> lock(timerThreadMutex);
-						periodInterval = val & 0xFFFF;
-						periodDuration = slow_ticks(periodInterval ? periodInterval : 65536);
+						val &= 0xFFFF;
+						periodDuration = slow_ticks(val ? val : 65536);
 						periodIntervalMark = slowPointNow() + periodDuration;
 						timerThreadSignal.notify_all();
 					}
 					break;
 				case 0x0C:
 					updateRealTimeCounter(true);
-					realTimeDivider = val & 0xFFFF;
+					val &= 0xFFFF;
+					realTimeDivider = val ? val : 65536;
 					updateAlarmMatchMark(alarmValue);
 					break;
 				case 0x14:
@@ -1751,7 +1751,8 @@ private:
 					emitInterruptState();
 					break;
 				case 0x20:
-					updateAlarmMatchMark(val & 0xFFFF);
+					val &= 0x0FFFFF;
+					updateAlarmMatchMark(val ? val : 1048576);
 					break;
 				default:
 					core().dumpAndAbort("ST write %02x (%08x)", addr, val);
@@ -1819,7 +1820,6 @@ private:
 	private:
 		uint32_t enabledInterrupts;
 		uint32_t interruptStatus;
-		uint32_t periodInterval;
 		slow_ticks periodDuration;
 		uint32_t alarmValue;
 		uint32_t realTimeDivider;
