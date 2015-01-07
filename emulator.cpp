@@ -74,7 +74,7 @@ public:
 		memoryController.reset();
 		systemControlCoprocessor.reset();
 		currentTick.reset();
-		assertedInterrupts = 0;
+		irqAsserted = false;
 	}
 	void tick() {
 		switch (currentTick.pendingOperation) {
@@ -110,12 +110,9 @@ public:
 			currentTick.curPC = registerFile.getProgramCounter();
 			// process interrupts
 			uint32_t curCPSR = readCPSR();
-			uint32_t intBits = assertedInterrupts & ~curCPSR;
-			if (intBits) {
+			if ((~curCPSR & PSR_BITS_I) && irqAsserted) {
 				bool V = systemControlCoprocessor.controlReg &
 					SystemControlCoprocessor::CONTROL_REG_V;
-				if (intBits & PSR_BITS_F)
-					dumpAndAbort("FIQ unsupported");
 				writeCPSR((curCPSR & ~PSR_BITS_MODE) | CPU_MODE_IRQ | PSR_BITS_I);
 				writeSPSR(curCPSR);
 				writeRegister(14, currentTick.curPC + 4);
@@ -1009,6 +1006,8 @@ public:
 	void writeRegister(uint32_t reg, uint32_t val) { registerFile.writeRegister(reg, val); }
 	uint32_t getPC() { return currentTick.curPC; }
 	void setPC(uint32_t pc) { currentTick.curPC = pc; }
+	bool getIRQ() { return irqAsserted; }
+	void setIRQ(bool state) { irqAsserted = state; }
 public:
 	struct MemoryInterface {
 		virtual void reset(ARM920T& core) {}
@@ -1325,7 +1324,7 @@ private:
 	MemoryController memoryController{*this};
 	SystemControlCoprocessor systemControlCoprocessor{*this};
 	TickState currentTick;
-	std::atomic<unsigned int> assertedInterrupts;
+	std::atomic<bool> irqAsserted;
 	union {
 		struct {
 			bool load;
@@ -1573,17 +1572,25 @@ private:
 						edgeMask |= 1 << irq;
 					else
 						edgeMask &= ~(1 << irq);
+					updateOutput();
 				}
 			} else {
 				switch (addr) {
 					case 0x120:
 						enabledInterrupts |= val;
+						updateOutput();
 						break;
 					case 0x124:
 						enabledInterrupts &= ~val;
+						updateOutput();
 						break;
 					case 0x128:
-						fprintf(stderr, "TODO: write to interrupt clear (%08x)\n", val);
+						edgeStatus &= ~val;
+						updateOutput();
+						break;
+					case 0x12C:
+						edgeStatus |= val;
+						updateOutput();
 						break;
 					case 0x130:
 						fprintf(stderr, "TODO: write to EOICR (%08x)\n", val);
@@ -1610,8 +1617,19 @@ private:
 				rawInterrupts &= ~(1 << irq);
 			if (!oldstate && state)
 				edgeStatus |= 1 << irq;
+			updateOutput();
 		}
 	private:
+		uint32_t pendingInterrupts() const {
+			return (edgeStatus & edgeMask) | (rawInterrupts & ~edgeMask);
+		}
+		uint32_t effectiveInterrupts() const {
+			return enabledInterrupts & pendingInterrupts();
+		}
+		void updateOutput() {
+			std::lock_guard<std::recursive_mutex> guard(intf.irqMutex);
+			core().setIRQ(effectiveInterrupts());
+		}
 	private:
 		uint32_t enabledInterrupts;
 		uint32_t rawInterrupts;
