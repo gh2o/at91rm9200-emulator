@@ -1387,6 +1387,7 @@ public:
 		for (int i = 0; i < 16; i++)
 			if (systemPeripherals[i])
 				systemPeripherals[i]->reset();
+		systemInterrupt.reset();
 	}
 	void allocateSystemMemory(uint32_t size) {
 		systemMemory.reset(new uint32_t[size / 4 + 1]);
@@ -1467,17 +1468,16 @@ private:
 			INTERRUPT_SOURCE_SYSTEM_CLOCK,
 		};
 		SystemInterrupt(AT91RM9200Interface& intf) : intf(intf) {}
+		void reset() {
+			assertedSources = 0;
+		}
 		void setInterruptState(InterruptSource src, bool val) {
-			if (val) {
-				bool shouldAssert = !assertedSources;
+			std::lock_guard<std::recursive_mutex> guard(intf.irqMutex);
+			if (val)
 				assertedSources |= 1 << src;
-				if (shouldAssert)
-					intf.interruptController.setInterruptState(1, true);
-			} else {
+			else
 				assertedSources &= ~(1 << src);
-				if (!assertedSources)
-					intf.interruptController.setInterruptState(1, false);
-			}
+			intf.interruptController.setInterruptState(1, assertedSources);
 		}
 	private:
 		AT91RM9200Interface& intf;
@@ -1535,6 +1535,7 @@ private:
 		using Peripheral::Peripheral;
 		void reset() override {
 			enabledInterrupts = 0;
+			assertedInterrupts = 0;
 			std::fill(std::begin(sourceModes), std::end(sourceModes), 0);
 			std::fill(std::begin(sourceVectors), std::end(sourceVectors), 0);
 		}
@@ -1631,6 +1632,7 @@ private:
 						std::unique_lock<std::mutex> lock(timerThreadMutex);
 						result = interruptStatus;
 						interruptStatus = 0;
+						emitInterruptState();
 						timerThreadSignal.notify_all();
 					}
 					return result;
@@ -1660,9 +1662,11 @@ private:
 					if (val & ~ST_IRQ_ALL)
 						core().dumpAndAbort("unsupported ST interrupts: %08x\n", val);
 					enabledInterrupts |= val;
+					emitInterruptState();
 					break;
 				case 0x18:
 					enabledInterrupts &= ~val;
+					emitInterruptState();
 					break;
 				default:
 					core().dumpAndAbort("ST write %02x (%08x)", addr, val);
@@ -1683,6 +1687,11 @@ private:
 				realTimeLastUpdated = nowTime;
 			else
 				realTimeLastUpdated += slow_ticks(realTimeIncrement * actualDivider);
+		}
+		void emitInterruptState() {
+			intf.systemInterrupt.setInterruptState(
+					SystemInterrupt::INTERRUPT_SOURCE_SYSTEM_CLOCK,
+					enabledInterrupts & interruptStatus);
 		}
 		void timerLoop() {
 			using std::chrono::time_point_cast;
@@ -1710,6 +1719,7 @@ private:
 					if (st == std::cv_status::timeout) {
 						interruptStatus |= ST_IRQ_PITS;
 						periodIntervalMark += periodDuration;
+						emitInterruptState();
 					}
 				}
 			}
@@ -1734,6 +1744,8 @@ private:
 	AIC interruptController{*this, 0xFFFFF000};
 	DBGU debugUnit{*this, 0xFFFFF200};
 	ST systemTimer{*this, 0xFFFFFD00};
+	SystemInterrupt systemInterrupt{*this};
+	std::recursive_mutex irqMutex;
 };
 
 std::vector<char> readFileToVector(const char *path) {
