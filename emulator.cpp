@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -1811,7 +1812,7 @@ private:
 				}
 				if (nowTime >= alarmMatchMark) {
 					interruptStatus |= ST_IRQ_ALMS;
-					alarmMatchMark += (1 << 20) * realTimeDivider;
+					alarmMatchMark += slow_ticks((1 << 20) * realTimeDivider);
 					emitInterruptState();
 				}
 			}
