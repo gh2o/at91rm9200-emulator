@@ -114,8 +114,7 @@ public:
 		if (currentTick.tickError != TICK_ERROR_NONE) {
 			currentTick.pendingOperation = PENDING_OPERATION_NONE;
 			dumpAndAbort("tick error %d occurred", currentTick.tickError);
-		}
-		if (currentTick.pendingOperation == PENDING_OPERATION_NONE) {
+		} else if (currentTick.pendingOperation == PENDING_OPERATION_NONE) {
 			currentTick.curPC = registerFile.getProgramCounter();
 			// process interrupts
 			if ((~readCPSR() & PSR_BITS_I) && irqAsserted)
