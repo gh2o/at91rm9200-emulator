@@ -1545,6 +1545,8 @@ private:
 			rawInterrupts = 0;
 			edgeMask = 0;
 			edgeStatus = 0;
+			levelMask = 0;
+			std::fill(std::begin(levelNums), std::end(levelNums), 0);
 			std::fill(std::begin(sourceModes), std::end(sourceModes), 0);
 			std::fill(std::begin(sourceVectors), std::end(sourceVectors), 0);
 			std::fill(std::begin(priorityMasks), std::end(priorityMasks), 0);
@@ -1560,11 +1562,34 @@ private:
 			} else {
 				switch (addr) {
 					case 0x100:
-						fprintf(stderr, "TODO: read from interrupt vector\n");
-						return spuriousVector;
+						{
+							uint32_t efInts = effectiveInterrupts();
+							for (int lvl = 7; lvl >= 0; lvl--) {
+								if (levelMask & (1 << lvl)) {
+									break;
+								}
+								uint32_t prioEfInts = efInts & priorityMasks[lvl];
+								if (prioEfInts) {
+									uint32_t irqNum = rightMostBit(prioEfInts);
+									levelMask |= 1 << lvl;
+									levelNums[lvl] = irqNum;
+									edgeStatus &= 1 << irqNum;
+									updateOutput();
+									break;
+								}
+							}
+						}
+						if (levelMask)
+							return sourceVectors[levelNums[leftMostBit(levelMask)]];
+						else
+							return spuriousVector;
+						break;
 					case 0x108:
-						fprintf(stderr, "TODO: read from interrupt status\n");
-						return 0;
+						if (levelMask)
+							return levelNums[leftMostBit(levelMask)];
+						else
+							return 0;
+						break;
 					default:
 						core().dumpAndAbort("AIC read %02x", addr);
 						break;
@@ -1605,7 +1630,8 @@ private:
 						updateOutput();
 						break;
 					case 0x130:
-						fprintf(stderr, "TODO: write to EOICR (%08x)\n", val);
+						if (levelMask)
+							levelMask &= ~(1 << leftMostBit(levelMask));
 						break;
 					case 0x134:
 						spuriousVector = val;
@@ -1647,6 +1673,8 @@ private:
 		uint32_t rawInterrupts;
 		uint32_t edgeMask;
 		uint32_t edgeStatus;
+		uint32_t levelMask;
+		uint32_t levelNums[8];
 		uint32_t sourceModes[32];
 		uint32_t sourceVectors[32];
 		uint32_t priorityMasks[8];
