@@ -1303,6 +1303,10 @@ private:
 							break;
 					}
 					break;
+				case 5:
+					return faultStatus;
+				case 6:
+					return faultAddress;
 				default:
 					core.dumpAndAbort("CP15 unknown register read %d", CRn);
 					break;
