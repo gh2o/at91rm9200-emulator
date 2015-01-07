@@ -407,25 +407,25 @@ public:
 			unsigned int shift = 8 * (st.address & 3);
 			uint32_t aladdr = st.address & ~3;
 			if (st.load) {
-				// LDRB
-				uint32_t data = memoryController.readWord(aladdr, errorOccurred);
+				// LDRB(T)
+				uint32_t data = memoryController.readWord(aladdr, st.usermode, errorOccurred);
 				if (errorOccurred) {
 					currentTick.tickError = TICK_ERROR_DATA_ABORT;
 					return;
 				}
 				writeRegister(st.Rd, (data >> shift) & 0xFF);
 			} else {
-				// STRB
+				// STRB(T)
 				if (st.hasInjectedValue) {
 					// actually store it
-					memoryController.writeWord(aladdr, st.injectedValue, errorOccurred);
+					memoryController.writeWord(aladdr, st.injectedValue, st.usermode, errorOccurred);
 					if (errorOccurred) {
 						currentTick.tickError = TICK_ERROR_DATA_ABORT;
 						return;
 					}
 				} else {
 					// load and inject
-					uint32_t data = memoryController.readWord(aladdr, errorOccurred);
+					uint32_t data = memoryController.readWord(aladdr, st.usermode, errorOccurred);
 					if (errorOccurred) {
 						currentTick.tickError = TICK_ERROR_DATA_ABORT;
 						return;
@@ -439,17 +439,17 @@ public:
 			}
 		} else {
 			if (st.load) {
-				// LDR
-				uint32_t data = memoryController.readWord(st.address, errorOccurred);
+				// LDR(T)
+				uint32_t data = memoryController.readWord(st.address, st.usermode, errorOccurred);
 				if (errorOccurred) {
 					currentTick.tickError = TICK_ERROR_DATA_ABORT;
 					return;
 				}
 				writeRegister(st.Rd, data);
 			} else {
-				// STR
+				// STR(T)
 				uint32_t data = readRegister(st.Rd);
-				memoryController.writeWord(st.address, data, errorOccurred);
+				memoryController.writeWord(st.address, data, st.usermode, errorOccurred);
 				if (errorOccurred) {
 					currentTick.tickError = TICK_ERROR_DATA_ABORT;
 					return;
@@ -761,7 +761,8 @@ public:
 		auto& st = pendingOperationState.ldr_str;
 		st.load = L;
 		st.byte = B;
-		st.writeback = (P == W);
+		st.usermode = !P && W;
+		st.writeback = !P || W;
 		st.Rn = Rn;
 		st.Rd = Rd;
 		uint32_t Rn_value = readRegister(Rn);
@@ -774,8 +775,6 @@ public:
 		else
 			st.address = Rn_value;
 		st.hasInjectedValue = false;
-		if (!P && W)
-			dumpAndAbort("LDRT/STRT not implemented");
 	}
 	void inst_LDM_STM(
 			bool L, bool S, bool P, bool U, bool W, unsigned int Rn, uint32_t register_list) {
@@ -1113,17 +1112,23 @@ private:
 		MemoryController(ARM920T& core) : core(core) {}
 		void reset() {}
 		uint32_t readWord(uint32_t addr, bool& errorOccurred) {
+			return readWord(addr, false, errorOccurred);
+		}
+		void writeWord(uint32_t addr, uint32_t val, bool& errorOccurred) {
+			writeWord(addr, val, false, errorOccurred);
+		}
+		uint32_t readWord(uint32_t addr, bool usermode, bool& errorOccurred) {
 			if (addr & 3)
 				core.dumpAndAbort("readWord unaligned");
-			addr = translateAddress(addr, PERM_CHECK_READ, errorOccurred);
+			addr = translateAddress(addr, PERM_CHECK_READ, usermode, errorOccurred);
 			if (errorOccurred)
 				return 0;
 			return readWordPhysical(addr, errorOccurred);
 		}
-		void writeWord(uint32_t addr, uint32_t val, bool& errorOccurred) {
+		void writeWord(uint32_t addr, uint32_t val, bool usermode, bool& errorOccurred) {
 			if (addr & 3)
 				core.dumpAndAbort("writeWord unaligned");
-			addr = translateAddress(addr, PERM_CHECK_WRITE, errorOccurred);
+			addr = translateAddress(addr, PERM_CHECK_WRITE, usermode, errorOccurred);
 			if (errorOccurred)
 				return;
 			writeWordPhysical(addr, val, errorOccurred);
@@ -1134,7 +1139,7 @@ private:
 		void writeWordPhysical(uint32_t addr, uint32_t val, bool& errorOccurred) {
 			core.memoryInterface.writeWordPhysical(addr, val, errorOccurred);
 		}
-		uint32_t translateAddress(uint32_t addr, PermCheck pcheck, bool& errorOccurred) {
+		uint32_t translateAddress(uint32_t addr, PermCheck pcheck, bool usermode, bool& errorOccurred) {
 			auto& scc = core.systemControlCoprocessor;
 			typedef SystemControlCoprocessor SCC;
 			if (!(scc.controlReg & SCC::CONTROL_REG_M))
@@ -1179,7 +1184,7 @@ private:
 				bool AP0 = apbits & 1;
 				bool S = scc.controlReg & SCC::CONTROL_REG_S;
 				bool R = scc.controlReg & SCC::CONTROL_REG_R;
-				bool isPrivileged = core.isPrivileged();
+				bool isPrivileged = core.isPrivileged() && !usermode;
 				bool accessAllowed;
 				switch (pcheck) {
 					case PERM_CHECK_NONE:
@@ -1349,6 +1354,7 @@ private:
 		struct {
 			bool load;
 			bool byte;
+			bool usermode;
 			bool writeback;
 			unsigned int Rn;
 			unsigned int Rd;
