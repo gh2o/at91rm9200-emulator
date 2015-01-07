@@ -14,6 +14,8 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <mutex>
+#include <condition_variable>
 
 static inline uint32_t rotateRight(uint32_t val, uint32_t count) {
 	return (val >> count) | (val << (32 - count));
@@ -1603,26 +1605,37 @@ private:
 	};
 	class ST : public Peripheral {
 		static constexpr uint64_t ONE_BILLION = 1000000000ULL;
-		typedef std::chrono::duration<int64_t, std::ratio<1, 32768>> slow_ticks;
 		typedef std::chrono::steady_clock time_clock;
-		typedef std::chrono::time_point<time_clock> time_point;
+		typedef std::chrono::duration<int64_t, std::ratio<1, 32768>> slow_ticks;
+		typedef std::chrono::time_point<time_clock, slow_ticks> slow_point;
+		enum {
+			ST_IRQ_PITS = 1 << 0,
+			ST_IRQ_ALL = ST_IRQ_PITS,
+		};
 	public:
 		using Peripheral::Peripheral;
 		void reset() override {
 			enabledInterrupts = 0;
-			nanosPerTick = ONE_BILLION;
+			interruptStatus = 0;
 			periodInterval = 0;
+			periodIntervalChanged = false;
 			realTimeDivider = 0x8000;
 			realTimeCounter = 0;
-			lastUpdated = time_clock::now();
+			realTimeLastUpdated = slowPointNow();
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
+			uint32_t result;
 			switch (addr) {
 				case 0x10:
-					fprintf(stderr, "TODO: ST read from SR (status)\n");
-					return 0;
+					{
+						std::unique_lock<std::mutex> lock(timerThreadMutex);
+						result = interruptStatus;
+						interruptStatus = 0;
+						timerThreadSignal.notify_all();
+					}
+					return result;
 				case 0x24:
-					updateCounter(false);
+					updateRealTimeCounter(false);
 					return realTimeCounter & 0x0FFFFF;
 				default:
 					core().dumpAndAbort("ST read %02x", addr);
@@ -1632,17 +1645,20 @@ private:
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
 			switch (addr) {
 				case 0x04:
-					periodInterval = val & 0xFFFF;
+					{
+						std::unique_lock<std::mutex> lock(timerThreadMutex);
+						periodInterval = val & 0xFFFF;
+						periodIntervalChanged = true;
+						timerThreadSignal.notify_all();
+					}
 					break;
 				case 0x0C:
-					updateCounter(true);
+					updateRealTimeCounter(true);
 					realTimeDivider = val & 0xFFFF;
-					if (realTimeDivider == 0)
-						nanosPerTick = 2 * ONE_BILLION;
-					else
-						nanosPerTick = realTimeDivider * ONE_BILLION / 0x8000;
 					break;
 				case 0x14:
+					if (val & ~ST_IRQ_ALL)
+						core().dumpAndAbort("unsupported ST interrupts: %08x\n", val);
 					enabledInterrupts |= val;
 					break;
 				case 0x18:
@@ -1653,24 +1669,62 @@ private:
 					break;
 			}
 		}
-		void updateCounter(bool flushPartials) {
-			using std::chrono::duration_cast;
-			time_point nowTime = time_clock::now();
-			slow_ticks elapsedTicks = duration_cast<slow_ticks>(nowTime - lastUpdated);
-			realTimeCounter += elapsedTicks.count();
-			if (flushPartials) {
-				lastUpdated = nowTime;
-			} else {
-				lastUpdated += duration_cast<time_point::duration>(elapsedTicks);
+		slow_point slowPointNow() {
+			using std::chrono::time_point_cast;
+			return time_point_cast<slow_ticks>(time_clock::now());
+		}
+		void updateRealTimeCounter(bool flushPartials) {
+			slow_point nowTime = slowPointNow();
+			uint64_t numSlowTicks = (nowTime - realTimeLastUpdated).count();
+			uint32_t actualDivider = realTimeDivider ? realTimeDivider : 65536;
+			uint32_t realTimeIncrement = numSlowTicks / actualDivider;
+			realTimeCounter += realTimeIncrement;
+			if (flushPartials)
+				realTimeLastUpdated = nowTime;
+			else
+				realTimeLastUpdated += slow_ticks(realTimeIncrement * actualDivider);
+		}
+		void timerLoop() {
+			using std::chrono::time_point_cast;
+			std::unique_lock<std::mutex> lock(timerThreadMutex);
+			slow_ticks periodDuration(65536);
+			slow_point periodIntervalMark = slowPointNow();
+			while (true) {
+				slow_point nowTime = slowPointNow();
+				if (periodIntervalChanged) {
+					periodDuration = slow_ticks(periodInterval ? periodInterval : 65536);
+					periodIntervalMark = nowTime + periodDuration;
+					periodIntervalChanged = false;
+				}
+				if (interruptStatus & ST_IRQ_PITS) {
+					// wait until further notice
+					timerThreadSignal.wait(lock);
+				} else {
+					// recalculate next period interrupt
+					if (periodIntervalMark < nowTime) {
+						uint32_t periodsPassed = (nowTime - periodIntervalMark) / periodDuration;
+						periodIntervalMark += (periodsPassed + 1) * periodDuration;
+					}
+					auto st = timerThreadSignal.wait_until(lock,
+							time_point_cast<time_clock::duration>(periodIntervalMark));
+					if (st == std::cv_status::timeout) {
+						interruptStatus |= ST_IRQ_PITS;
+						periodIntervalMark += periodDuration;
+					}
+				}
 			}
 		}
 	private:
 		uint32_t enabledInterrupts;
-		uint64_t nanosPerTick;
+		uint32_t interruptStatus;
 		uint32_t periodInterval;
+		bool periodIntervalChanged;
 		uint32_t realTimeDivider;
 		uint32_t realTimeCounter;
-		time_point lastUpdated;
+		slow_point realTimeLastUpdated;
+		std::mutex timerThreadMutex;
+		std::condition_variable timerThreadSignal;
+		std::thread timerThread{&ST::timerLoop, this};
 	};
 private:
 	ARM920T *corePtr;
