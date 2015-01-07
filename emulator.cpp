@@ -1153,8 +1153,8 @@ private:
 			if (!(scc.controlReg & SCC::CONTROL_REG_M))
 				return addr;
 			// should be set
-			uint32_t newaddr;
-			uint32_t apbits;
+			uint32_t newaddr = 0;
+			uint32_t apbits = 0;
 			// first level walk
 			uint32_t desc1addr =
 				(scc.translationTableBase & 0xFFFFC000) |
