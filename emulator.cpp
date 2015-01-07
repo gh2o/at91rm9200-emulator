@@ -113,7 +113,14 @@ public:
 		}
 		if (currentTick.tickError != TICK_ERROR_NONE) {
 			currentTick.pendingOperation = PENDING_OPERATION_NONE;
-			dumpAndAbort("tick error %d occurred", currentTick.tickError);
+			switch (currentTick.tickError) {
+				case TICK_ERROR_DATA_ABORT:
+					prepareInterrupt(0x10, CPU_MODE_ABT | PSR_BITS_I, currentTick.curPC + 8);
+					break;
+				default:
+					dumpAndAbort("unknown tick error %d", currentTick.tickError);
+					break;
+			}
 		} else if (currentTick.pendingOperation == PENDING_OPERATION_NONE) {
 			currentTick.curPC = registerFile.getProgramCounter();
 			// process interrupts
