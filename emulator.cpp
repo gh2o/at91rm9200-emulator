@@ -1435,6 +1435,7 @@ public:
 		} else if (peripheral) {
 			return peripheral->readFromAddress(addr, errorOccurred);
 		} else {
+			fprintf(stderr, "TE read from unknown physaddr %08x\n", addr);
 			errorOccurred = true;
 			return 0;
 		}
@@ -1448,6 +1449,7 @@ public:
 		} else if (peripheral) {
 			peripheral->writeToAddress(addr, val, errorOccurred);
 		} else {
+			fprintf(stderr, "TE write from unknown physaddr %08x value %08x\n", addr, val);
 			errorOccurred = true;
 			return;
 		}
