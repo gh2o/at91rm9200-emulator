@@ -1535,15 +1535,19 @@ private:
 		using Peripheral::Peripheral;
 		void reset() override {
 			enabledInterrupts = 0;
-			assertedInterrupts = 0;
+			rawInterrupts = 0;
+			edgeMask = 0;
+			edgeStatus = 0;
 			std::fill(std::begin(sourceModes), std::end(sourceModes), 0);
 			std::fill(std::begin(sourceVectors), std::end(sourceVectors), 0);
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
-			if ((addr & ~0x7F) == 0x00) {
-				return sourceModes[(addr & 0x7F) / 4];
-			} else if ((addr & ~0x7F) == 0x80) {
-				return sourceVectors[(addr & 0x7F) / 4];
+			if ((addr & ~0xFF) == 0x00) {
+				uint32_t irq = (addr & 0x7F) / 4;
+				if (addr & 0x80)
+					return sourceVectors[irq];
+				else
+					return sourceModes[irq];
 			} else {
 				switch (addr) {
 					case 0x100:
@@ -1559,12 +1563,17 @@ private:
 			}
 		}
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
-			if ((addr & ~0x7F) == 0x00) {
-				fprintf(stderr, "TODO: write to SMR%d (%08x)\n", (addr & 0x7F) / 4, val);
-				sourceModes[(addr & 0x7F) / 4] = val;
-			} else if ((addr & ~0x7F) == 0x80) {
-				fprintf(stderr, "TODO: write to SVR%d (%08x)\n", (addr & 0x7F) / 4, val);
-				sourceVectors[(addr & 0x7F) / 4] = val;
+			if ((addr & ~0xFF) == 0x00) {
+				uint32_t irq = (addr & 0x7F) / 4;
+				if (addr & 0x80) {
+					sourceVectors[irq] = val;
+				} else {
+					sourceModes[irq] = val & 0x67;
+					if (val & (1 << 5))
+						edgeMask |= 1 << irq;
+					else
+						edgeMask &= ~(1 << irq);
+				}
 			} else {
 				switch (addr) {
 					case 0x120:
@@ -1583,7 +1592,8 @@ private:
 						spuriousVector = val;
 						break;
 					case 0x138:
-						fprintf(stderr, "TODO: write to DCR (debug) (%08x)\n", val);
+						if (val)
+							core().dumpAndAbort("AIC has no requested debug features");
 						break;
 					default:
 						core().dumpAndAbort("AIC write %02x", addr);
@@ -1592,14 +1602,21 @@ private:
 			}
 		}
 		void setInterruptState(unsigned int irq, bool state) {
+			std::lock_guard<std::recursive_mutex> guard(intf.irqMutex);
+			bool oldstate = rawInterrupts & (1 << irq);
 			if (state)
-				assertedInterrupts |= 1 << irq;
+				rawInterrupts |= 1 << irq;
 			else
-				assertedInterrupts &= ~(1 << irq);
+				rawInterrupts &= ~(1 << irq);
+			if (!oldstate && state)
+				edgeStatus |= 1 << irq;
 		}
 	private:
+	private:
 		uint32_t enabledInterrupts;
-		uint32_t assertedInterrupts;
+		uint32_t rawInterrupts;
+		uint32_t edgeMask;
+		uint32_t edgeStatus;
 		uint32_t sourceModes[32];
 		uint32_t sourceVectors[32];
 		uint32_t spuriousVector;
