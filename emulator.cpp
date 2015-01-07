@@ -1766,19 +1766,18 @@ private:
 		void updateRealTimeCounter(bool flushPartials) {
 			slow_point nowTime = slowPointNow();
 			uint64_t numSlowTicks = (nowTime - realTimeLastUpdated).count();
-			uint32_t actualDivider = realTimeDivider ? realTimeDivider : 65536;
-			uint32_t realTimeIncrement = numSlowTicks / actualDivider;
+			uint32_t realTimeIncrement = numSlowTicks / realTimeDivider;
 			realTimeCounter = (realTimeCounter + realTimeIncrement) & 0x0FFFFF;
 			if (flushPartials)
 				realTimeLastUpdated = nowTime;
 			else
-				realTimeLastUpdated += slow_ticks(realTimeIncrement * actualDivider);
+				realTimeLastUpdated += slow_ticks(realTimeIncrement * realTimeDivider);
 		}
 		void updateAlarmMatchMark(uint32_t newAlarmValue) {
 			std::unique_lock<std::mutex> lock(timerThreadMutex);
 			alarmValue = newAlarmValue;
 			alarmMatchMark = realTimeLastUpdated +
-				slow_ticks((alarmValue - realTimeCounter) & 0x0FFFFF);
+				slow_ticks(((alarmValue - realTimeCounter) & 0x0FFFFF) * realTimeDivider);
 			timerThreadSignal.notify_all();
 		}
 		void emitInterruptState() {
@@ -1812,7 +1811,7 @@ private:
 				}
 				if (nowTime >= alarmMatchMark) {
 					interruptStatus |= ST_IRQ_ALMS;
-					alarmMatchMark += (1 << 20) * 
+					alarmMatchMark += (1 << 20) * realTimeDivider;
 					emitInterruptState();
 				}
 			}
