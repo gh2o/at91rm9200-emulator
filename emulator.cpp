@@ -1696,11 +1696,13 @@ private:
 			enabledInterrupts = 0;
 			interruptStatus = 0;
 			periodInterval = 0;
-			periodIntervalChanged = false;
+			periodDuration = slow_ticks(65536);
 			alarmValue = 0;
 			realTimeDivider = 0x8000;
 			realTimeCounter = 0;
 			realTimeLastUpdated = slowPointNow();
+			periodIntervalMark = slowPointNow();
+			alarmMatchMark = slowPointNow();
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			uint32_t result;
@@ -1728,7 +1730,8 @@ private:
 					{
 						std::unique_lock<std::mutex> lock(timerThreadMutex);
 						periodInterval = val & 0xFFFF;
-						periodIntervalChanged = true;
+						periodDuration = slow_ticks(periodInterval ? periodInterval : 65536);
+						periodIntervalMark = slowPointNow() + periodDuration;
 						timerThreadSignal.notify_all();
 					}
 					break;
@@ -1763,8 +1766,6 @@ private:
 			return time_point_cast<slow_ticks>(time_clock::now());
 		}
 		void updateRealTimeCounter(bool flushPartials) {
-			// timerLoop needs both Counter and LastUpdated at same time
-			std::unique_lock<std::mutex> lock(timerThreadMutex);
 			slow_point nowTime = slowPointNow();
 			uint64_t numSlowTicks = (nowTime - realTimeLastUpdated).count();
 			uint32_t actualDivider = realTimeDivider ? realTimeDivider : 65536;
@@ -1774,7 +1775,6 @@ private:
 				realTimeLastUpdated = nowTime;
 			else
 				realTimeLastUpdated += slow_ticks(realTimeIncrement * actualDivider);
-			timerThreadSignal.notify_all();
 		}
 		void emitInterruptState() {
 			intf.systemInterrupt.setInterruptState(
@@ -1784,16 +1784,8 @@ private:
 		void timerLoop() {
 			using std::chrono::time_point_cast;
 			std::unique_lock<std::mutex> lock(timerThreadMutex);
-			slow_ticks periodDuration(65536);
-			slow_point periodIntervalMark = slowPointNow();
-			slow_point alarmMatchMark = slowPointNow();
 			while (true) {
 				slow_point nowTime = slowPointNow();
-				if (periodIntervalChanged) {
-					periodDuration = slow_ticks(periodInterval ? periodInterval : 65536);
-					periodIntervalMark = nowTime + periodDuration;
-					periodIntervalChanged = false;
-				}
 				if (periodIntervalMark < nowTime) {
 					uint32_t periodsPassed = (nowTime - periodIntervalMark) / periodDuration;
 					periodIntervalMark += (periodsPassed + 1) * periodDuration;
@@ -1817,11 +1809,13 @@ private:
 		uint32_t enabledInterrupts;
 		uint32_t interruptStatus;
 		uint32_t periodInterval;
-		bool periodIntervalChanged;
+		slow_ticks periodDuration;
 		uint32_t alarmValue;
 		uint32_t realTimeDivider;
 		uint32_t realTimeCounter;
 		slow_point realTimeLastUpdated;
+		slow_point periodIntervalMark;
+		slow_point alarmMatchMark;
 		std::mutex timerThreadMutex;
 		std::condition_variable timerThreadSignal;
 		std::thread timerThread{&ST::timerLoop, this};
