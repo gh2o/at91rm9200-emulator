@@ -118,16 +118,18 @@ public:
 		if (currentTick.pendingOperation == PENDING_OPERATION_NONE) {
 			currentTick.curPC = registerFile.getProgramCounter();
 			// process interrupts
-			uint32_t curCPSR = readCPSR();
-			if ((~curCPSR & PSR_BITS_I) && irqAsserted) {
-				bool V = systemControlCoprocessor.controlReg &
-					SystemControlCoprocessor::CONTROL_REG_V;
-				writeCPSR((curCPSR & ~PSR_BITS_MODE) | CPU_MODE_IRQ | PSR_BITS_I);
-				writeSPSR(curCPSR);
-				writeRegister(14, currentTick.curPC + 4);
-				setPC(V ? 0xFFFF0018 : 0x18);
-			}
+			if ((~readCPSR() & PSR_BITS_I) && irqAsserted)
+				prepareInterrupt(0x18, CPU_MODE_IRQ | PSR_BITS_I, currentTick.curPC + 4);
 		}
+	}
+	void prepareInterrupt(uint32_t vecAddr, uint32_t cpsrBits, uint32_t lrValue) {
+		bool V = systemControlCoprocessor.controlReg &
+			SystemControlCoprocessor::CONTROL_REG_V;
+		uint32_t curCPSR = readCPSR();
+		writeCPSR((curCPSR & ~PSR_BITS_MODE) | cpsrBits);
+		writeSPSR(curCPSR);
+		writeRegister(14, lrValue);
+		setPC(V ? (vecAddr | 0xFFFF0000) : vecAddr);
 	}
 	void tickExecute() {
 		bool errorOccurred = false;
