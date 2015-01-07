@@ -1694,6 +1694,7 @@ private:
 	public:
 		using Peripheral::Peripheral;
 		void reset() override {
+			std::unique_lock<std::mutex> lock(timerThreadMutex);
 			enabledInterrupts = 0;
 			interruptStatus = 0;
 			periodDuration = slow_ticks(65536);
@@ -1737,8 +1738,11 @@ private:
 					break;
 				case 0x0C:
 					updateRealTimeCounter(true);
-					val &= 0xFFFF;
-					realTimeDivider = val ? val : 65536;
+					{
+						std::unique_lock<std::mutex> lock(timerThreadMutex);
+						val &= 0xFFFF;
+						realTimeDivider = val ? val : 65536;
+					}
 					updateAlarmMatchMark(alarmValue);
 					break;
 				case 0x14:
