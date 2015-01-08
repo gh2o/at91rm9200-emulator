@@ -1521,7 +1521,7 @@ public:
 		}
 	}
 	struct MMCCard {
-		virtual void doTransaction(unsigned int cmd, unsigned int arg) = 0;
+		virtual void doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) = 0;
 	};
 private:
 	class SystemInterrupt {
@@ -2018,9 +2018,15 @@ private:
 						mmcSignal.wait(lock);
 					req = currentRequest;
 				}
+				if (req.modeRegister >> 16)
+					core().dumpAndAbort("MCI non-zero block length not implemented");
+				if (req.commandRegister & 0x30000)
+					core().dumpAndAbort("transfer dirs not implemented");
 				mmcCard->doTransaction(
 						req.commandRegister & 0x3F,
-						req.argumentRegister);
+						req.argumentRegister,
+						responseBuffer);
+				responseOffset = 0;
 			}
 		}
 		void setCard(MMCCard& card) {
@@ -2033,6 +2039,8 @@ private:
 		uint32_t modeRegister;
 		uint32_t argumentRegister;
 		MCIRequest currentRequest;
+		uint32_t responseBuffer[4];
+		uint32_t responseOffset;
 		std::mutex mmcMutex;
 		std::condition_variable mmcSignal;
 		std::thread mmcThread;
@@ -2056,10 +2064,13 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 public:
 	void reset() {
 	}
-	void doTransaction(unsigned int cmd, unsigned int arg) {
+	void doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) {
 		switch (cmd) {
 			case 0:
 				reset();
+				break;
+			case 52:
+				std::fill(resp, resp + 4, 0);
 				break;
 			default:
 				fprintf(stderr, "EC unknown command %d\n", cmd);
