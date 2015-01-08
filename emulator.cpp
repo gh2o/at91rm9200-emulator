@@ -1940,8 +1940,10 @@ private:
 	class MCI : public Peripheral {
 		enum MCIStatus{
 			MCI_STATUS_CMDRDY = 1 << 0,
+			MCI_STATUS_RXBUFF = 1 << 14,
+			MCI_STATUS_TXBUFE = 1 << 15,
 			MCI_STATUS_RTOE = 1 << 20,
-			MCI_STATUS_ALL = MCI_STATUS_CMDRDY | MCI_STATUS_RTOE,
+			MCI_STATUS_ALL = MCI_STATUS_CMDRDY | MCI_STATUS_RXBUFF | MCI_STATUS_TXBUFE | MCI_STATUS_RTOE,
 		};
 		struct MCIRequest {
 			uint32_t modeRegister;
@@ -1953,9 +1955,11 @@ private:
 		void reset() override {
 			std::unique_lock<std::mutex> lock(mmcMutex);
 			enabledInterrupts = 0;
-			statusRegister = 0xC0E5;
+			statefulStatus = 0xE1;
 			modeRegister = 0;
 			argumentRegister = 0;
+			dmaRcvEnabled = false;
+			dmaTrxEnabled = false;
 			emitInterruptState();
 			if (!mmcThread.joinable())
 				mmcThread = std::thread(&MCI::mmcLoop, this);
@@ -1970,7 +1974,7 @@ private:
 				case 0x2C:
 					return responseBuffer[responseOffset++ & 3];
 				case 0x40:
-					return statusRegister;
+					return getStatusRegister();
 				case 0x4C:
 					return enabledInterrupts;
 				case 0xFC: // version
@@ -1999,12 +2003,12 @@ private:
 				case 0x14: // command register
 					{
 						std::unique_lock<std::mutex> lock(mmcMutex);
-						if (statusRegister & MCI_STATUS_CMDRDY) {
+						if (statefulStatus & MCI_STATUS_CMDRDY) {
 							auto& req = currentRequest;
 							req.modeRegister = modeRegister;
 							req.argumentRegister = argumentRegister;
 							req.commandRegister = val;
-							statusRegister &= ~(MCI_STATUS_CMDRDY | MCI_STATUS_RTOE);
+							statefulStatus &= ~(MCI_STATUS_CMDRDY | MCI_STATUS_RTOE);
 							emitInterruptState();
 							mmcSignal.notify_all();
 						}
@@ -2033,8 +2037,10 @@ private:
 						dmaRcvEnabled = false;
 					else if (val & 0x1)
 						dmaRcvEnabled = true;
-					if (val & 0x300)
-						core().dumpAndAbort("MCI tx dma enabling not implemented");
+					if (val & 0x200)
+						dmaTrxEnabled = false;
+					else if (val & 0x100)
+						dmaTrxEnabled = true;
 					break;
 				default:
 					core().dumpAndAbort("MCI write %04x value %08x", addr, val);
@@ -2043,16 +2049,16 @@ private:
 		}
 		void emitInterruptState() {
 			intf.interruptController.setInterruptState(
-					10, enabledInterrupts & statusRegister);
+					10, enabledInterrupts & getStatusRegister());
 		}
 		void mmcLoop() {
 			while (true) {
 				MCIRequest req;
 				{
 					std::unique_lock<std::mutex> lock(mmcMutex);
-					statusRegister |= MCI_STATUS_CMDRDY;
+					statefulStatus |= MCI_STATUS_CMDRDY;
 					emitInterruptState();
-					while (statusRegister & MCI_STATUS_CMDRDY)
+					while (statefulStatus & MCI_STATUS_CMDRDY)
 						mmcSignal.wait(lock);
 					req = currentRequest;
 				}
@@ -2067,24 +2073,32 @@ private:
 				if (responded || (req.commandRegister & 0xC0) == 0)
 					responseOffset = 0;
 				else
-					statusRegister |= MCI_STATUS_RTOE;
+					statefulStatus |= MCI_STATUS_RTOE;
 			}
 		}
 		void setCard(MMCCard& card) {
 			mmcCard = &card;
 		}
+		uint32_t getStatusRegister() {
+			uint32_t res = statefulStatus;
+			if (dmaTrxCount == 0)
+				res |= MCI_STATUS_TXBUFE;
+			if (dmaRcvCount == 0)
+				res |= MCI_STATUS_RXBUFF;
+			return res;
+		}
 	private:
 		MMCCard *mmcCard;
 		uint32_t enabledInterrupts;
-		std::atomic<uint32_t> statusRegister;
+		std::atomic<uint32_t> statefulStatus;
 		uint32_t modeRegister;
 		uint32_t argumentRegister;
 		MCIRequest currentRequest;
 		uint32_t responseBuffer[4];
 		uint32_t responseOffset;
-		uint32_t dmaRcvAddr;
-		uint32_t dmaRcvCount;
-		bool dmaRcvEnabled;
+		uint32_t dmaRcvAddr, dmaTrxAddr;
+		uint32_t dmaRcvCount, dmaTrxCount;
+		bool dmaRcvEnabled, dmaTrxEnabled;
 		std::mutex mmcMutex;
 		std::condition_variable mmcSignal;
 		std::thread mmcThread;
