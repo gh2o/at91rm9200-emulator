@@ -64,6 +64,12 @@
 				interrupts = <10 IRQ_TYPE_LEVEL_HIGH 0>;
 				clock-names = "mci_clk";
 				clocks = <&dummyck>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				slot@0 {
+					reg = <0>;
+					bus-width = <4>;
+				};
 			};
 		};
 	};
@@ -79,6 +85,6 @@
 /* overridden */
 / {
 	chosen {
-		bootargs = "earlyprintk keep_bootcon console=ttyS0";
+		bootargs = "earlyprintk keep_bootcon debug console=ttyS0";
 	};
 };
