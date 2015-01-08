@@ -1303,6 +1303,10 @@ private:
 							break;
 					}
 					break;
+				case 2:
+					return translationTableBase;
+				case 3:
+					return domainAccess;
 				case 5:
 					return faultStatus;
 				case 6:
