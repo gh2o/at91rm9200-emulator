@@ -2313,28 +2313,31 @@ public:
 		cardStatus = (cardStatus & ~CSR_CURRENT_STATE) | newState;
 	}
 	size_t doRead(uint8_t *buf, size_t siz) override {
+		size_t bytesRead;
+		bool operationDone;
 		switch (dataCommand) {
 			case DATA_CMD_SEND_SCR:
-				{
-					size_t bts = std::min(siz, sizeof(FIXED_SCR) - dataOffset);
-					std::copy(FIXED_SCR + dataOffset,
-							FIXED_SCR + dataOffset + bts,
-							buf);
-					dataOffset += bts;
-					return bts;
-				}
+				bytesRead = std::min(siz, sizeof(FIXED_SCR) - dataOffset);
+				std::copy(FIXED_SCR + dataOffset,
+						FIXED_SCR + dataOffset + bytesRead,
+						buf);
+				dataOffset += bytesRead;
+				operationDone = (dataOffset == sizeof(FIXED_SCR));
+				break;
 			case DATA_CMD_SD_STATUS:
-				{
-					size_t bts = std::min(siz, size_t(64));
-					std::fill(buf, buf + bts, 0);
-					dataOffset += bts;
-					return bts;
-				}
+				bytesRead = std::min(siz, size_t(64));
+				std::fill(buf, buf + bytesRead, 0);
+				dataOffset += bytesRead;
+				operationDone = (dataOffset == 64);
+				break;
 			default:
 				fprintf(stderr, "EC unknown read data\n");
 				abort();
 				break;
 		}
+		if (operationDone)
+			setState(CSR_CURRENT_STATE_TRAN);
+		return bytesRead;
 	}
 private:
 	uint32_t cardStatus;
