@@ -2269,6 +2269,10 @@ public:
 				case 9:
 					respondR2_CSD(resp);
 					return true;
+				case 13:
+					dataCommand = oldDataCommand;
+					respondR1(resp);
+					return true;
 				case 18:
 					if (getState() == CSR_CURRENT_STATE_TRAN) {
 						setState(CSR_CURRENT_STATE_DATA);
