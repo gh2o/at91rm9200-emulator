@@ -1919,12 +1919,21 @@ private:
 		uint32_t enabledInterrupts;
 	};
 	class MCI : public Peripheral {
+		enum MCIStatus{
+			MCI_STATUS_CMDRDY = 1 << 0,
+			MCI_STATUS_ALL = MCI_STATUS_CMDRDY,
+		};
+		struct MCIRequest {
+			uint32_t modeRegister;
+			uint32_t argumentRegister;
+			uint32_t commandRegister;
+		};
 	public:
 		using Peripheral::Peripheral;
 		void reset() override {
 			enabledInterrupts = 0;
-			modeRegster = 0;
 			statusRegister = 0xC0E5;
+			modeRegister = 0;
 			argumentRegister = 0;
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
@@ -1947,7 +1956,7 @@ private:
 						reset();
 					break;
 				case 0x04: // mode register
-					modeRegster = val;
+					modeRegister = val;
 					break;
 				case 0x0C: // SD card register
 					break;
@@ -1955,9 +1964,19 @@ private:
 					argumentRegister = val;
 					break;
 				case 0x14: // command register
-					fprintf(stderr, ">>> TODO: MCI command register %08x\n", val);
+					if (statusRegister & MCI_STATUS_CMDRDY) {
+						std::lock_guard<std::mutex> guard(mmcMutex);
+						auto& req = currentRequest;
+						req.modeRegister = modeRegister;
+						req.argumentRegister = argumentRegister;
+						req.commandRegister = val;
+						statusRegister &= ~MCI_STATUS_CMDRDY;
+						mmcSignal.notify_all();
+					}
 					break;
 				case 0x44:
+					if (val & ~MCI_STATUS_ALL)
+						core().dumpAndAbort("unsupported MCI interrupts: %08x\n", val);
 					enabledInterrupts |= val;
 					break;
 				case 0x48:
@@ -1968,11 +1987,26 @@ private:
 					break;
 			}
 		}
+		void mmcLoop() {
+			while (true) {
+				MCIRequest req;
+				{
+					std::unique_lock<std::mutex> lock(mmcMutex);
+					while (statusRegister & MCI_STATUS_CMDRDY)
+						mmcSignal.wait(lock);
+					req = currentRequest;
+				}
+			}
+		}
 	private:
 		uint32_t enabledInterrupts;
-		uint32_t modeRegster;
 		uint32_t statusRegister;
+		uint32_t modeRegister;
 		uint32_t argumentRegister;
+		MCIRequest currentRequest;
+		std::mutex mmcMutex;
+		std::condition_variable mmcSignal;
+		std::thread mmcThread{&MCI::mmcLoop, this};
 	};
 private:
 	ARM920T *corePtr;
