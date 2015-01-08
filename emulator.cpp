@@ -1759,7 +1759,8 @@ private:
 			periodIntervalMark = slowPointNow();
 			alarmMatchMark = slowPointNow();
 			emitInterruptState();
-			timerThread = std::thread(&ST::timerLoop, this);
+			if (!timerThread.joinable())
+				timerThread = std::thread(&ST::timerLoop, this);
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			uint32_t result;
@@ -1937,12 +1938,14 @@ private:
 	public:
 		using Peripheral::Peripheral;
 		void reset() override {
+			std::lock_guard<std::mutex> guard(mmcMutex);
 			enabledInterrupts = 0;
 			statusRegister = 0xC0E4;
 			modeRegister = 0;
 			argumentRegister = 0;
 			emitInterruptState();
-			mmcThread = std::thread(&MCI::mmcLoop, this);
+			if (!mmcThread.joinable())
+				mmcThread = std::thread(&MCI::mmcLoop, this);
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
