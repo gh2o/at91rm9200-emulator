@@ -2072,6 +2072,7 @@ private:
 };
 
 class EmulatedCard : public AT91RM9200Interface::MMCCard {
+	static constexpr uint16_t FIXED_RCA = 0x1111;
 	enum CSR {
 		CSR_ILLEGAL_COMMAND = 1 << 22,
 		CSR_APP_CMD = 1 << 5,
@@ -2080,6 +2081,7 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 		CSR_CURRENT_STATE_READY = 1 << 9,
 		CSR_CURRENT_STATE_IDENT = 2 << 9,
 		CSR_CURRENT_STATE_STBY = 3 << 9,
+		CSR_CURRENT_STATE_TRAN = 4 << 9,
 	};
 public:
 	void reset() {
@@ -2114,8 +2116,16 @@ public:
 					return true;
 				case 3:
 					setState(CSR_CURRENT_STATE_STBY);
-					respondR6(resp, 0x0001);
+					respondR6(resp, FIXED_RCA);
 					return true;
+				case 7:
+					if (arg >> 16 == FIXED_RCA) {
+						setState(CSR_CURRENT_STATE_TRAN);
+						respondR1b(resp);
+						return true;
+					} else {
+						return false;
+					}
 				case 8:
 					respondR7(resp, arg & 0xFF);
 					return true;
@@ -2142,6 +2152,9 @@ public:
 	void respondR1(uint32_t resp[4]) {
 		resp[0] = cardStatus | tempStatus;
 		tempStatus = 0;
+	}
+	void respondR1b(uint32_t resp[4]) {
+		respondR1(resp);
 	}
 	void respondR2(uint32_t resp[4]) {
 		uint8_t mid = 42;
