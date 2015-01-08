@@ -2171,6 +2171,7 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 	enum DataCommand {
 		DATA_CMD_NONE,
 		DATA_CMD_SEND_SCR,
+		DATA_CMD_SD_STATUS,
 	};
 public:
 	void reset() {
@@ -2192,6 +2193,16 @@ public:
 			expectAppCmd = false;
 			tempStatus |= CSR_APP_CMD;
 			switch (cmd) {
+				case 13:
+					if (getState() == CSR_CURRENT_STATE_TRAN) {
+						setState(CSR_CURRENT_STATE_DATA);
+						dataCommand = DATA_CMD_SD_STATUS;
+						dataOffset = 0;
+						respondR1(resp);
+						return true;
+					} else {
+						return false;
+					}
 				case 41:
 					setState(CSR_CURRENT_STATE_READY);
 					respondR3(resp, 0xC0FF8000);
@@ -2309,6 +2320,13 @@ public:
 					std::copy(FIXED_SCR + dataOffset,
 							FIXED_SCR + dataOffset + bts,
 							buf);
+					dataOffset += bts;
+					return bts;
+				}
+			case DATA_CMD_SD_STATUS:
+				{
+					size_t bts = std::min(siz, size_t(64));
+					std::fill(buf, buf + bts, 0);
 					dataOffset += bts;
 					return bts;
 				}
