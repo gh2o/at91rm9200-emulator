@@ -1212,6 +1212,8 @@ private:
 						else
 							accessAllowed = AP1 & AP0;
 						break;
+					default:
+						core.dumpAndAbort("unknown pcheck!");
 				}
 				if (!accessAllowed)
 					core.dumpAndAbort("denied access to addr %08x -> %08x", addr, newaddr);
