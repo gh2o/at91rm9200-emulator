@@ -1531,7 +1531,7 @@ public:
 		}
 	}
 	struct MMCCard {
-		virtual bool doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) = 0;
+		virtual bool doCommand(unsigned int cmd, unsigned int arg, uint32_t resp[4]) = 0;
 	};
 private:
 	class SystemInterrupt {
@@ -2072,7 +2072,7 @@ private:
 						mmcSignal.wait(lock);
 					req = currentRequest;
 				}
-				bool responded = mmcCard->doTransaction(
+				bool responded = mmcCard->doCommand(
 						req.commandRegister & 0x3F,
 						req.argumentRegister,
 						responseBuffer);
@@ -2143,7 +2143,7 @@ public:
 		tempStatus = 0;
 		expectAppCmd = false;
 	}
-	bool doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) {
+	bool doCommand(unsigned int cmd, unsigned int arg, uint32_t resp[4]) {
 		if (cmd == 0) {
 			reset();
 			respondR1(resp);
