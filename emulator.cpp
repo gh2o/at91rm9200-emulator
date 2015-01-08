@@ -1416,9 +1416,10 @@ private:
 class AT91RM9200Interface : public ARM920T::MemoryInterface {
 	class Peripheral;
 public:
+	struct MMCCard;
 	static constexpr uint32_t systemMemoryBase = 0x20000000;
 public:
-	AT91RM9200Interface() {
+	AT91RM9200Interface(MMCCard& mmcCard) {
 		systemPeripherals[0x0] = &interruptController;
 		systemPeripherals[0x1] = &interruptController;
 		systemPeripherals[0x2] = &debugUnit;
@@ -1426,6 +1427,7 @@ public:
 		systemPeripherals[0xC] = &powerManager;
 		systemPeripherals[0xD] = &systemTimer;
 		userPeripherals[0xD] = &mmcInterface;
+		mmcInterface.setCard(mmcCard);
 	}
 	void reset(ARM920T& core) {
 		corePtr = &core;
@@ -1518,6 +1520,8 @@ public:
 			corePtr->dumpAndAbort("could not interpret address: %08x", addr);
 		}
 	}
+	struct MMCCard {
+	};
 private:
 	class SystemInterrupt {
 	public:
@@ -1997,7 +2001,11 @@ private:
 				}
 			}
 		}
+		void setCard(MMCCard& card) {
+			mmcCard = &card;
+		}
 	private:
+		MMCCard *mmcCard;
 		uint32_t enabledInterrupts;
 		uint32_t statusRegister;
 		uint32_t modeRegister;
@@ -2020,6 +2028,9 @@ private:
 	PMC powerManager{*this, 0xFFFFFC00};
 	SystemInterrupt systemInterrupt{*this};
 	std::recursive_mutex irqMutex;
+};
+
+class EmulatedCard : public AT91RM9200Interface::MMCCard {
 };
 
 std::vector<char> readFileToVector(const char *path) {
@@ -2062,8 +2073,11 @@ int main(int argc, char *argv[]) {
 	setvbuf(stdout, nullptr, _IONBF, 0);
 	setvbuf(stderr, nullptr, _IONBF, 0);
 
+	// initialize card
+	EmulatedCard card;
+
 	// initialize interface
-	AT91RM9200Interface interface;
+	AT91RM9200Interface interface(card);
 	interface.allocateSystemMemory(64 * 1024 * 1024);
 
 	// initialize core
