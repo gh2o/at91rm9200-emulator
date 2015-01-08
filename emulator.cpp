@@ -2157,6 +2157,11 @@ private:
 class EmulatedCard : public AT91RM9200Interface::MMCCard {
 	static const uint16_t FIXED_RCA;
 	static const uint8_t FIXED_SCR[8];
+	static constexpr std::ios_base::openmode IMAGE_FLAGS =
+		std::ios_base::in |
+		std::ios_base::out |
+		std::ios_base::ate |
+		std::ios_base::binary;
 	enum CSR {
 		CSR_ILLEGAL_COMMAND = 1 << 22,
 		CSR_APP_CMD = 1 << 5,
@@ -2175,6 +2180,21 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 		DATA_CMD_READ_MULTIPLE_BLOCK,
 	};
 public:
+	EmulatedCard(const char *path) : imageFile(path, IMAGE_FLAGS) {
+		if (!imageFile) {
+			std::cerr << "Error: Failed to initialize card from disk image." << std::endl;
+			exit(1);
+		}
+		imageSize = imageFile.tellg();
+		if (!imageSize) {
+			std::cerr << "Error: Disk image is empty." << std::endl;
+			exit(1);
+		}
+		if (imageSize & 0x7FFFF) {
+			std::cerr << "Error: Image size must be 512 KiB aligned." << std::endl;
+			exit(1);
+		}
+	}
 	void reset() {
 		cardStatus = 0;
 		tempStatus = 0;
@@ -2300,8 +2320,8 @@ public:
 		resp[1] = 0x5B590000;
 		resp[2] = 0x00007F80;
 		resp[3] = 0x0A400001;
-		uint32_t sizeInMB = 128;
-		uint32_t encodedSize = sizeInMB * 2 - 1;
+		uint32_t halfMBChunks = imageSize >> 19;
+		uint32_t encodedSize = halfMBChunks- 1;
 		resp[1] |= encodedSize >> 16;
 		resp[2] |= encodedSize << 16;
 	}
@@ -2353,6 +2373,8 @@ public:
 		return bytesRead;
 	}
 private:
+	std::fstream imageFile;
+	size_t imageSize;
 	uint32_t cardStatus;
 	uint32_t tempStatus;
 	bool expectAppCmd;
@@ -2384,8 +2406,8 @@ void coreMainLoop(ARM920T* coreptr) {
 
 int main(int argc, char *argv[]) {
 
-	if (argc != 3) {
-		std::cerr << "Usage: " << argv[0] << " <kernel-image> <emulator.dtb>" << std::endl;
+	if (argc != 4) {
+		std::cerr << "Usage: " << argv[0] << " <kernel-image> <emulator.dtb> <disk-image>" << std::endl;
 		return 1;
 	}
 
@@ -2406,7 +2428,7 @@ int main(int argc, char *argv[]) {
 	setvbuf(stderr, nullptr, _IONBF, 0);
 
 	// initialize card
-	EmulatedCard card;
+	EmulatedCard card(argv[3]);
 
 	// initialize interface
 	AT91RM9200Interface interface(card);
