@@ -1732,7 +1732,6 @@ private:
 		uint32_t spuriousVector;
 	};
 	class ST : public Peripheral {
-		static constexpr uint64_t ONE_BILLION = 1000000000ULL;
 		typedef std::chrono::steady_clock time_clock;
 		typedef std::chrono::duration<int64_t, std::ratio<1, 32768>> slow_ticks;
 		typedef std::chrono::time_point<time_clock, slow_ticks> slow_point;
