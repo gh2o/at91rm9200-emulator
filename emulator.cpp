@@ -1532,6 +1532,7 @@ public:
 	}
 	struct MMCCard {
 		virtual bool doCommand(unsigned int cmd, unsigned int arg, uint32_t resp[4]) = 0;
+		virtual size_t doRead(uint8_t *buf, size_t siz) = 0;
 	};
 private:
 	class SystemInterrupt {
@@ -2041,6 +2042,7 @@ private:
 					break;
 				case 0x104:
 					dmaRcvCount = val;
+					statefulStatus &= ~MCI_STATUS_ENDRX;
 					break;
 				case 0x120:
 					if (val & 0x2)
@@ -2083,9 +2085,28 @@ private:
 					statefulStatus |= MCI_STATUS_RTOE;
 					continue;
 				}
-				uint32_t trcmd = (req.commandRegister >> 16) & 3;
+				unsigned int trcmd = (req.commandRegister >> 16) & 3;
+				bool trdir = req.commandRegister & (1 << 18);
+				unsigned int blklen = (req.modeRegister >> 16) & 0x3FFC;
+				if (trcmd && (req.modeRegister & 0x8000) == 0)
+					core().dumpAndAbort("MCI only supports PDC transfers");
 				if (trcmd == 1) {
-					core().dumpAndAbort("MCI start data transfer");
+					if (trdir) {
+						uint32_t bytesReqd = std::min(dmaRcvCount << 2, blklen);
+						std::unique_ptr<uint32_t[]> tmpBuffer(new uint32_t[bytesReqd]);
+						size_t bytesRead = mmcCard->doRead((uint8_t *)tmpBuffer.get(), bytesReqd);
+						size_t wordsRead = bytesRead >> 2;
+						bool errorOccurred = false;
+						for (size_t i = 0; i < wordsRead; i++) {
+							intf.writeWordPhysical(dmaRcvAddr, le32toh(tmpBuffer[i]), errorOccurred);
+							dmaRcvAddr += 4;
+							dmaRcvCount -= 1;
+						}
+						if (dmaRcvCount == 0)
+							statefulStatus |= MCI_STATUS_ENDRX;
+					} else {
+						core().dumpAndAbort("MCI data write");
+					}
 				} else if (trcmd == 2) {
 					core().dumpAndAbort("MCI stop data transfer");
 				}
@@ -2134,7 +2155,8 @@ private:
 };
 
 class EmulatedCard : public AT91RM9200Interface::MMCCard {
-	static constexpr uint16_t FIXED_RCA = 0x1111;
+	static const uint16_t FIXED_RCA;
+	static const uint8_t FIXED_SCR[8];
 	enum CSR {
 		CSR_ILLEGAL_COMMAND = 1 << 22,
 		CSR_APP_CMD = 1 << 5,
@@ -2146,13 +2168,21 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 		CSR_CURRENT_STATE_TRAN = 4 << 9,
 		CSR_CURRENT_STATE_DATA = 5 << 9,
 	};
+	enum DataCommand {
+		DATA_CMD_NONE,
+		DATA_CMD_SEND_SCR,
+	};
 public:
 	void reset() {
 		cardStatus = 0;
 		tempStatus = 0;
 		expectAppCmd = false;
+		dataCommand = DATA_CMD_NONE;
+		dataOffset = 0;
 	}
-	bool doCommand(unsigned int cmd, unsigned int arg, uint32_t resp[4]) {
+	bool doCommand(unsigned int cmd, unsigned int arg, uint32_t resp[4]) override {
+		DataCommand oldDataCommand = dataCommand;
+		dataCommand = DATA_CMD_NONE;
 		if (cmd == 0) {
 			reset();
 			respondR1(resp);
@@ -2169,6 +2199,8 @@ public:
 				case 51:
 					if (getState() == CSR_CURRENT_STATE_TRAN) {
 						setState(CSR_CURRENT_STATE_DATA);
+						dataCommand = DATA_CMD_SEND_SCR;
+						dataOffset = 0;
 						respondR1(resp);
 						return true;
 					} else {
@@ -2259,11 +2291,34 @@ public:
 	void setState(uint32_t newState) {
 		cardStatus = (cardStatus & ~CSR_CURRENT_STATE) | newState;
 	}
+	size_t doRead(uint8_t *buf, size_t siz) override {
+		switch (dataCommand) {
+			case DATA_CMD_SEND_SCR:
+				{
+					size_t bts = std::min(siz, sizeof(FIXED_SCR) - dataOffset);
+					std::copy(FIXED_SCR + dataOffset,
+							FIXED_SCR + dataOffset + bts,
+							buf);
+					dataOffset += bts;
+					return bts;
+				}
+			default:
+				fprintf(stderr, "EC unknown read data\n");
+				abort();
+				break;
+		}
+	}
 private:
 	uint32_t cardStatus;
 	uint32_t tempStatus;
 	bool expectAppCmd;
+	DataCommand dataCommand;
+	uint32_t dataOffset;
 };
+
+const uint16_t EmulatedCard::FIXED_RCA = 0x1111;
+const uint8_t EmulatedCard::FIXED_SCR[8] =
+	{0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 std::vector<char> readFileToVector(const char *path) {
 	std::ifstream stream(path);
