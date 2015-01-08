@@ -2076,10 +2076,19 @@ private:
 						req.commandRegister & 0x3F,
 						req.argumentRegister,
 						responseBuffer);
-				if (responded || (req.commandRegister & 0xC0) == 0)
+				if (responded) {
 					responseOffset = 0;
-				else
+				} else {
+					// no response, assume timeout
 					statefulStatus |= MCI_STATUS_RTOE;
+					continue;
+				}
+				uint32_t trcmd = (req.commandRegister >> 16) & 3;
+				if (trcmd == 1) {
+					core().dumpAndAbort("MCI start data transfer");
+				} else if (trcmd == 2) {
+					core().dumpAndAbort("MCI stop data transfer");
+				}
 			}
 		}
 		void setCard(MMCCard& card) {
