@@ -1271,12 +1271,16 @@ private:
 		enum ControlRegBits {
 			CONTROL_REG_M = 1 << 0, // MMU enabled
 			CONTROL_REG_A = 1 << 1, // strict alignment
+			CONTROL_REG_C = 1 << 2, // L1 data cache
+			CONTROL_REG_W = 1 << 3, // write buffer
 			CONTROL_REG_S = 1 << 8,
 			CONTROL_REG_R = 1 << 9,
+			CONTROL_REG_I = 1 << 12, // L1 instruction cache
 			CONTROL_REG_V = 1 << 13, // high exception vectors
+			CONTROL_REG_RR = 1 << 14, // round robin cache replacement
 			CONTROL_REG_SBZ = 0xfc1a0000,
 			CONTROL_REG_SBO = 0x00050072,
-			CONTROL_REG_SUPPORTED = 0x2303
+			CONTROL_REG_SUPPORTED = 0x730F
 		};
 	public:
 		SystemControlCoprocessor(ARM920T& core) : core(core) {}
