@@ -1937,12 +1937,16 @@ private:
 				case 0x00: // control register
 					fprintf(stderr, "TODO: write to MCI control reg\n");
 					break;
+				case 0x04: // mode register
+					modeRegster = val;
+					break;
 				default:
 					core().dumpAndAbort("MCI write %04x value %08x", addr, val);
 					break;
 			}
 		}
 	private:
+		uint32_t modeRegster;
 	};
 private:
 	ARM920T *corePtr;
