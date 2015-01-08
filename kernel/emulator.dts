@@ -17,6 +17,12 @@
 	compatible = "atmel,at91rm9200";
 	interrupt-parent = <&aic>;
 
+	dummyck: dummyck {
+		compatible = "fixed-clock";
+		clock-frequency = <1000000>;
+		#clock-cells = <0>;
+	};
+
 	cpus {
 		#address-cells = <0>;
 		#size-cells = <0>;
@@ -51,6 +57,13 @@
 				compatible = "atmel,at91rm9200-st";
 				reg = <0xfffffd00 0x100>;
 				interrupts = <1 IRQ_TYPE_LEVEL_HIGH 7>;
+			};
+			mmc0: mmc@fffb4000 {
+				compatible = "atmel,hsmci";
+				reg = <0xfffb4000 0x4000>;
+				interrupts = <10 IRQ_TYPE_LEVEL_HIGH 0>;
+				clock-names = "mci_clk";
+				clocks = <&dummyck>;
 			};
 		};
 	};
