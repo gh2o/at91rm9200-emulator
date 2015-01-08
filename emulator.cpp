@@ -1938,7 +1938,7 @@ private:
 	public:
 		using Peripheral::Peripheral;
 		void reset() override {
-			std::lock_guard<std::mutex> guard(mmcMutex);
+			std::unique_lock<std::mutex> lock(mmcMutex);
 			enabledInterrupts = 0;
 			statusRegister = 0xC0E4;
 			modeRegister = 0;
@@ -1976,7 +1976,7 @@ private:
 					break;
 				case 0x14: // command register
 					{
-						std::lock_guard<std::mutex> guard(mmcMutex);
+						std::unique_lock<std::mutex> lock(mmcMutex);
 						if (statusRegister & MCI_STATUS_CMDRDY) {
 							auto& req = currentRequest;
 							req.modeRegister = modeRegister;
