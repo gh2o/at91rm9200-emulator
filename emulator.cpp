@@ -1521,6 +1521,7 @@ public:
 		}
 	}
 	struct MMCCard {
+		virtual void doTransaction(unsigned int cmd, unsigned int arg) = 0;
 	};
 private:
 	class SystemInterrupt {
@@ -1935,7 +1936,7 @@ private:
 		using Peripheral::Peripheral;
 		void reset() override {
 			enabledInterrupts = 0;
-			statusRegister = 0xC0E5;
+			statusRegister = 0xC0E4;
 			modeRegister = 0;
 			argumentRegister = 0;
 		}
@@ -1967,14 +1968,16 @@ private:
 					argumentRegister = val;
 					break;
 				case 0x14: // command register
-					if (statusRegister & MCI_STATUS_CMDRDY) {
+					{
 						std::lock_guard<std::mutex> guard(mmcMutex);
-						auto& req = currentRequest;
-						req.modeRegister = modeRegister;
-						req.argumentRegister = argumentRegister;
-						req.commandRegister = val;
-						statusRegister &= ~MCI_STATUS_CMDRDY;
-						mmcSignal.notify_all();
+						if (statusRegister & MCI_STATUS_CMDRDY) {
+							auto& req = currentRequest;
+							req.modeRegister = modeRegister;
+							req.argumentRegister = argumentRegister;
+							req.commandRegister = val;
+							statusRegister &= ~MCI_STATUS_CMDRDY;
+							mmcSignal.notify_all();
+						}
 					}
 					break;
 				case 0x44:
@@ -1995,10 +1998,14 @@ private:
 				MCIRequest req;
 				{
 					std::unique_lock<std::mutex> lock(mmcMutex);
+					statusRegister |= MCI_STATUS_CMDRDY;
 					while (statusRegister & MCI_STATUS_CMDRDY)
 						mmcSignal.wait(lock);
 					req = currentRequest;
 				}
+				mmcCard->doTransaction(
+						req.commandRegister & 0x3F,
+						req.argumentRegister);
 			}
 		}
 		void setCard(MMCCard& card) {
@@ -2031,6 +2038,20 @@ private:
 };
 
 class EmulatedCard : public AT91RM9200Interface::MMCCard {
+public:
+	void reset() {
+	}
+	void doTransaction(unsigned int cmd, unsigned int arg) {
+		switch (cmd) {
+			case 0:
+				reset();
+				break;
+			default:
+				fprintf(stderr, "EC unknown command %d\n", cmd);
+				abort();
+				break;
+		}
+	}
 };
 
 std::vector<char> readFileToVector(const char *path) {
