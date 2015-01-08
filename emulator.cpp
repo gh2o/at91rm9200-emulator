@@ -1424,6 +1424,7 @@ public:
 		systemPeripherals[0x2] = &debugUnit;
 		systemPeripherals[0x3] = &debugUnit;
 		systemPeripherals[0xD] = &systemTimer;
+		userPeripherals[0xD] = &mmcInterface;
 	}
 	void reset(ARM920T& core) {
 		corePtr = &core;
@@ -1883,6 +1884,32 @@ private:
 		std::condition_variable timerThreadSignal;
 		std::thread timerThread{&ST::timerLoop, this};
 	};
+	class MCI : public Peripheral {
+	public:
+		using Peripheral::Peripheral;
+		void reset() override {
+		}
+		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
+			switch (addr) {
+				case 0xFC: // version
+					return 0x100;
+				default:
+					core().dumpAndAbort("MCI read %04x", addr);
+					break;
+			}
+		}
+		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
+			switch (addr) {
+				case 0x00: // control register
+					fprintf(stderr, "TODO: write to MCI control reg\n");
+					break;
+				default:
+					core().dumpAndAbort("MCI write %04x value %08x", addr, val);
+					break;
+			}
+		}
+	private:
+	};
 private:
 	ARM920T *corePtr;
 	std::unique_ptr<uint32_t[]> systemMemory;
@@ -1891,6 +1918,7 @@ private:
 	Peripheral *userPeripherals[32] = { nullptr };
 	AIC interruptController{*this, 0xFFFFF000};
 	DBGU debugUnit{*this, 0xFFFFF200};
+	MCI mmcInterface{*this, 0xFFFB4000};
 	ST systemTimer{*this, 0xFFFFFD00};
 	SystemInterrupt systemInterrupt{*this};
 	std::recursive_mutex irqMutex;
