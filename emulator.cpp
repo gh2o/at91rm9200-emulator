@@ -2038,13 +2038,13 @@ private:
 	uint32_t systemMemorySize = 0;
 	Peripheral *systemPeripherals[16] = { nullptr };
 	Peripheral *userPeripherals[32] = { nullptr };
+	SystemInterrupt systemInterrupt{*this};
+	std::recursive_mutex irqMutex;
 	AIC interruptController{*this, 0xFFFFF000};
 	DBGU debugUnit{*this, 0xFFFFF200};
 	MCI mmcInterface{*this, 0xFFFB4000};
 	ST systemTimer{*this, 0xFFFFFD00};
 	PMC powerManager{*this, 0xFFFFFC00};
-	SystemInterrupt systemInterrupt{*this};
-	std::recursive_mutex irqMutex;
 };
 
 class EmulatedCard : public AT91RM9200Interface::MMCCard {
