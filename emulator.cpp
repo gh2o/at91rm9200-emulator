@@ -2194,7 +2194,7 @@ public:
 			switch (cmd) {
 				case 41:
 					setState(CSR_CURRENT_STATE_READY);
-					respondR3(resp, 0x80FF8000);
+					respondR3(resp, 0xC0FF8000);
 					return true;
 				case 51:
 					if (getState() == CSR_CURRENT_STATE_TRAN) {
@@ -2215,7 +2215,7 @@ public:
 			switch (cmd) {
 				case 2:
 					setState(CSR_CURRENT_STATE_IDENT);
-					respondR2(resp);
+					respondR2_CID(resp);
 					return true;
 				case 3:
 					setState(CSR_CURRENT_STATE_STBY);
@@ -2233,7 +2233,7 @@ public:
 					respondR7(resp, arg & 0xFF);
 					return true;
 				case 9:
-					respondR2(resp);
+					respondR2_CSD(resp);
 					return true;
 				case 55:
 					expectAppCmd = true;
@@ -2259,7 +2259,7 @@ public:
 	void respondR1b(uint32_t resp[4]) {
 		respondR1(resp);
 	}
-	void respondR2(uint32_t resp[4]) {
+	void respondR2_CID(uint32_t resp[4]) {
 		uint8_t mid = 42;
 		const uint8_t oid[] = "Em";
 		const uint8_t pnm[] = "EmCrd";
@@ -2270,6 +2270,16 @@ public:
 		resp[1] = pnm[1] << 24 | pnm[2] << 16 | pnm[3] << 8 | pnm[4];
 		resp[2] = prv << 24 | psn >> 8;
 		resp[3] = psn << 24 | mdt << 8 | 0x1;
+	}
+	void respondR2_CSD(uint32_t resp[4]) {
+		resp[0] = 0x400E0032;
+		resp[1] = 0x5B590000;
+		resp[2] = 0x00007F80;
+		resp[3] = 0x0A400001;
+		uint32_t sizeInMB = 128;
+		uint32_t encodedSize = sizeInMB * 2 - 1;
+		resp[1] |= encodedSize >> 16;
+		resp[2] |= encodedSize << 16;
 	}
 	void respondR3(uint32_t resp[4], uint32_t ocr) {
 		resp[0] = ocr;
