@@ -1428,6 +1428,9 @@ public:
 		for (int i = 0; i < 16; i++)
 			if (systemPeripherals[i])
 				systemPeripherals[i]->reset();
+		for (int i = 0; i < 32; i++)
+			if (userPeripherals[i])
+				userPeripherals[i]->reset();
 		systemInterrupt.reset();
 	}
 	void allocateSystemMemory(uint32_t size) {
@@ -1499,6 +1502,14 @@ public:
 				*peripheral = posPeriph;
 			else
 				corePtr->dumpAndAbort("unknown system peripheral: %08x", periphId);
+		} else if ((addr & 0xFFF80000) == 0xFFF80000){
+			// user peripherals
+			uint32_t periphId = (addr >> 14) & 0x1F;
+			Peripheral *posPeriph = userPeripherals[periphId];
+			if (posPeriph)
+				*peripheral = posPeriph;
+			else
+				corePtr->dumpAndAbort("unknown user peripheral: %08x", periphId);
 		} else {
 			corePtr->dumpAndAbort("could not interpret address: %08x", addr);
 		}
@@ -1875,6 +1886,7 @@ private:
 	std::unique_ptr<uint32_t[]> systemMemory;
 	uint32_t systemMemorySize = 0;
 	Peripheral *systemPeripherals[16] = { nullptr };
+	Peripheral *userPeripherals[32] = { nullptr };
 	AIC interruptController{*this, 0xFFFFF000};
 	DBGU debugUnit{*this, 0xFFFFF200};
 	ST systemTimer{*this, 0xFFFFFD00};
