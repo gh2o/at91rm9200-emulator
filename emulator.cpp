@@ -1949,6 +1949,11 @@ private:
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x20:
+				case 0x24:
+				case 0x28:
+				case 0x2C:
+					return responseBuffer[responseOffset++ & 3];
 				case 0x40:
 					return statusRegister;
 				case 0x4C:
