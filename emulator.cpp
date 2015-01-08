@@ -1295,6 +1295,8 @@ private:
 					switch (opcode_2) {
 						case 0: // Main ID register
 							return 0x41129201;
+						case 1: // cache type
+							return 0;
 						default:
 							core.dumpAndAbort("CP15 reg 0 unknown opcode_2 %d", opcode_2);
 							break;
