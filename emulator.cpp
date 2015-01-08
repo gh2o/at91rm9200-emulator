@@ -1759,6 +1759,7 @@ private:
 			periodIntervalMark = slowPointNow();
 			alarmMatchMark = slowPointNow();
 			emitInterruptState();
+			timerThread = std::thread(&ST::timerLoop, this);
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			uint32_t result;
@@ -1888,7 +1889,7 @@ private:
 		slow_point alarmMatchMark;
 		std::mutex timerThreadMutex;
 		std::condition_variable timerThreadSignal;
-		std::thread timerThread{&ST::timerLoop, this};
+		std::thread timerThread;
 	};
 	class PMC : public Peripheral {
 	public:
@@ -1941,6 +1942,7 @@ private:
 			modeRegister = 0;
 			argumentRegister = 0;
 			emitInterruptState();
+			mmcThread = std::thread(&MCI::mmcLoop, this);
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
@@ -2030,7 +2032,7 @@ private:
 		MCIRequest currentRequest;
 		std::mutex mmcMutex;
 		std::condition_variable mmcSignal;
-		std::thread mmcThread{&MCI::mmcLoop, this};
+		std::thread mmcThread;
 	};
 private:
 	ARM920T *corePtr;
