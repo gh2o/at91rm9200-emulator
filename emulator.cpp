@@ -2078,6 +2078,8 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 		CSR_CURRENT_STATE = 0xF << 9,
 		CSR_CURRENT_STATE_IDLE = 0 << 9,
 		CSR_CURRENT_STATE_READY = 1 << 9,
+		CSR_CURRENT_STATE_IDENT = 2 << 9,
+		CSR_CURRENT_STATE_STBY = 3 << 9,
 	};
 public:
 	void reset() {
@@ -2097,7 +2099,7 @@ public:
 			switch (cmd) {
 				case 41:
 					setState(CSR_CURRENT_STATE_READY);
-					respondR3(resp, 0xFF80);
+					respondR3(resp, 0x80FF8000);
 					return true;
 				default:
 					fprintf(stderr, "EC unknown command ACMD%d\n", cmd);
@@ -2106,8 +2108,19 @@ public:
 			}
 		} else {
 			switch (cmd) {
+				case 2:
+					setState(CSR_CURRENT_STATE_IDENT);
+					respondR2(resp);
+					return true;
+				case 3:
+					setState(CSR_CURRENT_STATE_STBY);
+					respondR6(resp, 0x0001);
+					return true;
 				case 8:
 					respondR7(resp, arg & 0xFF);
+					return true;
+				case 9:
+					respondR2(resp);
 					return true;
 				case 55:
 					expectAppCmd = true;
@@ -2130,8 +2143,28 @@ public:
 		resp[0] = cardStatus | tempStatus;
 		tempStatus = 0;
 	}
+	void respondR2(uint32_t resp[4]) {
+		uint8_t mid = 42;
+		const uint8_t oid[] = "Em";
+		const uint8_t pnm[] = "EmCrd";
+		uint8_t prv = 1;
+		uint32_t psn = 0xDEADBEEF;
+		unsigned long mdt = (2015 - 2000) << 4 | 1;
+		resp[0] = mid << 24 | oid[0] << 16 | oid[1] << 8 | pnm[0];
+		resp[1] = pnm[1] << 24 | pnm[2] << 16 | pnm[3] << 8 | pnm[4];
+		resp[2] = prv << 24 | psn >> 8;
+		resp[3] = psn << 24 | mdt << 8 | 0x1;
+	}
 	void respondR3(uint32_t resp[4], uint32_t ocr) {
 		resp[0] = ocr;
+	}
+	void respondR6(uint32_t resp[4], uint16_t rca) {
+		uint32_t status = cardStatus | tempStatus;
+		tempStatus = 0;
+		resp[0] = (rca << 16) |
+			((status >> 8) & (0x3 << 14)) |
+			((status >> 6) & (0x1 << 13)) |
+			(status & 0x1FFF);
 	}
 	void respondR7(uint32_t resp[4], uint8_t ck) {
 		resp[0] = 0x100 | ck;
