@@ -2062,10 +2062,6 @@ private:
 						mmcSignal.wait(lock);
 					req = currentRequest;
 				}
-				if (req.modeRegister >> 16)
-					core().dumpAndAbort("MCI non-zero block length not implemented");
-				if (req.commandRegister & 0x30000)
-					core().dumpAndAbort("transfer dirs not implemented");
 				bool responded = mmcCard->doTransaction(
 						req.commandRegister & 0x3F,
 						req.argumentRegister,
@@ -2129,6 +2125,7 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 		CSR_CURRENT_STATE_IDENT = 2 << 9,
 		CSR_CURRENT_STATE_STBY = 3 << 9,
 		CSR_CURRENT_STATE_TRAN = 4 << 9,
+		CSR_CURRENT_STATE_DATA = 5 << 9,
 	};
 public:
 	void reset() {
@@ -2150,6 +2147,14 @@ public:
 					setState(CSR_CURRENT_STATE_READY);
 					respondR3(resp, 0x80FF8000);
 					return true;
+				case 51:
+					if (getState() == CSR_CURRENT_STATE_TRAN) {
+						setState(CSR_CURRENT_STATE_DATA);
+						respondR1(resp);
+						return true;
+					} else {
+						return false;
+					}
 				default:
 					fprintf(stderr, "EC unknown command ACMD%d\n", cmd);
 					abort();
@@ -2228,6 +2233,9 @@ public:
 	}
 	void respondR7(uint32_t resp[4], uint8_t ck) {
 		resp[0] = 0x100 | ck;
+	}
+	uint32_t getState() {
+		return cardStatus & CSR_CURRENT_STATE;
 	}
 	void setState(uint32_t newState) {
 		cardStatus = (cardStatus & ~CSR_CURRENT_STATE) | newState;
