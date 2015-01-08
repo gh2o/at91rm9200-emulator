@@ -2172,6 +2172,7 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 		DATA_CMD_NONE,
 		DATA_CMD_SEND_SCR,
 		DATA_CMD_SD_STATUS,
+		DATA_CMD_READ_MULTIPLE_BLOCK,
 	};
 public:
 	void reset() {
@@ -2179,6 +2180,7 @@ public:
 		tempStatus = 0;
 		expectAppCmd = false;
 		dataCommand = DATA_CMD_NONE;
+		currentSector = 0;
 		dataOffset = 0;
 	}
 	bool doCommand(unsigned int cmd, unsigned int arg, uint32_t resp[4]) override {
@@ -2246,6 +2248,17 @@ public:
 				case 9:
 					respondR2_CSD(resp);
 					return true;
+				case 18:
+					if (getState() == CSR_CURRENT_STATE_TRAN) {
+						setState(CSR_CURRENT_STATE_DATA);
+						dataCommand = DATA_CMD_READ_MULTIPLE_BLOCK;
+						currentSector = arg;
+						dataOffset = 0;
+						respondR1(resp);
+						return true;
+					} else {
+						return false;
+					}
 				case 55:
 					expectAppCmd = true;
 					tempStatus |= CSR_APP_CMD;
@@ -2344,6 +2357,7 @@ private:
 	uint32_t tempStatus;
 	bool expectAppCmd;
 	DataCommand dataCommand;
+	uint32_t currentSector;
 	uint32_t dataOffset;
 };
 
