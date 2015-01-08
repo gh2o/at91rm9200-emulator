@@ -2072,11 +2072,14 @@ private:
 class EmulatedCard : public AT91RM9200Interface::MMCCard {
 public:
 	void reset() {
+		cardStatus = 0;
+		errorStatus = 0;
 	}
 	bool doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) {
 		switch (cmd) {
 			case 0:
 				reset();
+				respondR1(resp);
 				return true;
 			case 52:
 				return false;
@@ -2086,6 +2089,13 @@ public:
 				break;
 		}
 	}
+	void respondR1(uint32_t resp[4]) {
+		resp[0] = cardStatus | errorStatus;
+		errorStatus = 0;
+	}
+private:
+	uint32_t cardStatus;
+	uint32_t errorStatus;
 };
 
 std::vector<char> readFileToVector(const char *path) {
