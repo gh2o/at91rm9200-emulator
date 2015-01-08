@@ -1940,7 +1940,7 @@ private:
 		void reset() override {
 			std::unique_lock<std::mutex> lock(mmcMutex);
 			enabledInterrupts = 0;
-			statusRegister = 0xC0E4;
+			statusRegister = 0xC0E5;
 			modeRegister = 0;
 			argumentRegister = 0;
 			emitInterruptState();
