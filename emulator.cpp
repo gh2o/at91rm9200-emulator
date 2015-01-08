@@ -1940,10 +1940,20 @@ private:
 	class MCI : public Peripheral {
 		enum MCIStatus{
 			MCI_STATUS_CMDRDY = 1 << 0,
+			MCI_STATUS_ENDRX = 1 << 6,
+			MCI_STATUS_ENDTX = 1 << 7,
 			MCI_STATUS_RXBUFF = 1 << 14,
 			MCI_STATUS_TXBUFE = 1 << 15,
 			MCI_STATUS_RTOE = 1 << 20,
-			MCI_STATUS_ALL = MCI_STATUS_CMDRDY | MCI_STATUS_RXBUFF | MCI_STATUS_TXBUFE | MCI_STATUS_RTOE,
+			MCI_STATUS_DCRCE = 1 << 21,
+			MCI_STATUS_DTOE = 1 << 22,
+			MCI_STATUS_OVRE = 1 << 30,
+			MCI_STATUS_UNRE = 1 << 31,
+			MCI_STATUS_ALL =
+				MCI_STATUS_CMDRDY | MCI_STATUS_ENDRX | MCI_STATUS_ENDTX |
+				MCI_STATUS_RXBUFF | MCI_STATUS_TXBUFE |
+				MCI_STATUS_RTOE | MCI_STATUS_DCRCE | MCI_STATUS_DTOE |
+				MCI_STATUS_OVRE | MCI_STATUS_UNRE
 		};
 		struct MCIRequest {
 			uint32_t modeRegister;
@@ -2018,7 +2028,7 @@ private:
 					break;
 				case 0x44:
 					if (val & ~MCI_STATUS_ALL)
-						core().dumpAndAbort("unsupported MCI interrupts: %08x\n", val);
+						core().dumpAndAbort("unsupported MCI interrupts: %08x\n", val & ~MCI_STATUS_ALL);
 					enabledInterrupts |= val;
 					emitInterruptState();
 					break;
