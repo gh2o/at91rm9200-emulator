@@ -1758,6 +1758,7 @@ private:
 			realTimeLastUpdated = slowPointNow();
 			periodIntervalMark = slowPointNow();
 			alarmMatchMark = slowPointNow();
+			emitInterruptState();
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			uint32_t result;
@@ -1939,6 +1940,7 @@ private:
 			statusRegister = 0xC0E4;
 			modeRegister = 0;
 			argumentRegister = 0;
+			emitInterruptState();
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
@@ -1976,6 +1978,7 @@ private:
 							req.argumentRegister = argumentRegister;
 							req.commandRegister = val;
 							statusRegister &= ~MCI_STATUS_CMDRDY;
+							emitInterruptState();
 							mmcSignal.notify_all();
 						}
 					}
@@ -1984,14 +1987,20 @@ private:
 					if (val & ~MCI_STATUS_ALL)
 						core().dumpAndAbort("unsupported MCI interrupts: %08x\n", val);
 					enabledInterrupts |= val;
+					emitInterruptState();
 					break;
 				case 0x48:
 					enabledInterrupts &= ~val;
+					emitInterruptState();
 					break;
 				default:
 					core().dumpAndAbort("MCI write %04x value %08x", addr, val);
 					break;
 			}
+		}
+		void emitInterruptState() {
+			intf.interruptController.setInterruptState(
+					10, enabledInterrupts & statusRegister);
 		}
 		void mmcLoop() {
 			while (true) {
@@ -1999,6 +2008,7 @@ private:
 				{
 					std::unique_lock<std::mutex> lock(mmcMutex);
 					statusRegister |= MCI_STATUS_CMDRDY;
+					emitInterruptState();
 					while (statusRegister & MCI_STATUS_CMDRDY)
 						mmcSignal.wait(lock);
 					req = currentRequest;
