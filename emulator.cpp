@@ -1880,7 +1880,7 @@ private:
 		}
 	private:
 		uint32_t enabledInterrupts;
-		uint32_t interruptStatus;
+		std::atomic<uint32_t> interruptStatus;
 		slow_ticks periodDuration;
 		uint32_t alarmValue;
 		uint32_t realTimeDivider;
@@ -2040,7 +2040,7 @@ private:
 	private:
 		MMCCard *mmcCard;
 		uint32_t enabledInterrupts;
-		uint32_t statusRegister;
+		std::atomic<uint32_t> statusRegister;
 		uint32_t modeRegister;
 		uint32_t argumentRegister;
 		MCIRequest currentRequest;
