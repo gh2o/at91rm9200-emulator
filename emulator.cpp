@@ -1989,6 +1989,8 @@ private:
 				case 0x04: // mode register
 					modeRegister = val;
 					break;
+				case 0x08: // data timeout
+					break;
 				case 0x0C: // SD card register
 					break;
 				case 0x10: // argument register
@@ -2008,6 +2010,8 @@ private:
 						}
 					}
 					break;
+				case 0x18: // reserved
+					break;
 				case 0x44:
 					if (val & ~MCI_STATUS_ALL)
 						core().dumpAndAbort("unsupported MCI interrupts: %08x\n", val);
@@ -2017,6 +2021,20 @@ private:
 				case 0x48:
 					enabledInterrupts &= ~val;
 					emitInterruptState();
+					break;
+				case 0x100:
+					dmaRcvAddr = val;
+					break;
+				case 0x104:
+					dmaRcvCount = val;
+					break;
+				case 0x120:
+					if (val & 0x2)
+						dmaRcvEnabled = false;
+					else if (val & 0x1)
+						dmaRcvEnabled = true;
+					if (val & 0x300)
+						core().dumpAndAbort("MCI tx dma enabling not implemented");
 					break;
 				default:
 					core().dumpAndAbort("MCI write %04x value %08x", addr, val);
@@ -2064,6 +2082,9 @@ private:
 		MCIRequest currentRequest;
 		uint32_t responseBuffer[4];
 		uint32_t responseOffset;
+		uint32_t dmaRcvAddr;
+		uint32_t dmaRcvCount;
+		bool dmaRcvEnabled;
 		std::mutex mmcMutex;
 		std::condition_variable mmcSignal;
 		std::thread mmcThread;
