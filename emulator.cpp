@@ -1583,6 +1583,8 @@ private:
 					return 0x0202;
 				case 0x1C: // transmit register
 					return 0;
+				case 0x20: // baudrate
+					return 1;
 				case 0x40: // ID register
 					return 0x09290781;
 				case 0x44: // EXID register
