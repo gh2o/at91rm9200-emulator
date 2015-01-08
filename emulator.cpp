@@ -6,6 +6,7 @@
 
 #include <stdarg.h>
 #include <stdint.h>
+#include <assert.h>
 #include <unistd.h>
 #include <algorithm>
 #include <iostream>
@@ -2358,10 +2359,22 @@ public:
 				operationDone = (dataOffset == sizeof(FIXED_SCR));
 				break;
 			case DATA_CMD_SD_STATUS:
-				bytesRead = std::min(siz, size_t(64));
+				bytesRead = std::min(siz, size_t(64 - dataOffset));
 				std::fill(buf, buf + bytesRead, 0);
 				dataOffset += bytesRead;
 				operationDone = (dataOffset == 64);
+				break;
+			case DATA_CMD_READ_MULTIPLE_BLOCK:
+				bytesRead = std::min(siz, size_t(512 - dataOffset));
+				imageFile.seekg((currentSector << 9) + dataOffset);
+				imageFile.read((char *)buf, bytesRead);
+				assert(size_t(imageFile.gcount()) == bytesRead);
+				dataOffset += bytesRead;
+				operationDone = false;
+				if (dataOffset == 512) {
+					currentSector++;
+					dataOffset = 0;
+				}
 				break;
 			default:
 				fprintf(stderr, "EC unknown read data\n");
