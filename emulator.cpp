@@ -1950,6 +1950,8 @@ private:
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x04:
+					return modeRegister;
 				case 0x20:
 				case 0x24:
 				case 0x28:
@@ -2070,32 +2072,77 @@ private:
 };
 
 class EmulatedCard : public AT91RM9200Interface::MMCCard {
+	enum CSR {
+		CSR_ILLEGAL_COMMAND = 1 << 22,
+		CSR_APP_CMD = 1 << 5,
+		CSR_CURRENT_STATE = 0xF << 9,
+		CSR_CURRENT_STATE_IDLE = 0 << 9,
+		CSR_CURRENT_STATE_READY = 1 << 9,
+	};
 public:
 	void reset() {
 		cardStatus = 0;
-		errorStatus = 0;
+		tempStatus = 0;
+		expectAppCmd = false;
 	}
 	bool doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) {
-		switch (cmd) {
-			case 0:
-				reset();
-				respondR1(resp);
-				return true;
-			case 52:
-				return false;
-			default:
-				fprintf(stderr, "EC unknown command %d\n", cmd);
-				abort();
-				break;
+		if (cmd == 0) {
+			reset();
+			respondR1(resp);
+			return true;
+		}
+		if (expectAppCmd) {
+			expectAppCmd = false;
+			tempStatus |= CSR_APP_CMD;
+			switch (cmd) {
+				case 41:
+					setState(CSR_CURRENT_STATE_READY);
+					respondR3(resp, 0xFF80);
+					return true;
+				default:
+					fprintf(stderr, "EC unknown command ACMD%d\n", cmd);
+					abort();
+					break;
+			}
+		} else {
+			switch (cmd) {
+				case 8:
+					respondR7(resp, arg & 0xFF);
+					return true;
+				case 55:
+					expectAppCmd = true;
+					tempStatus |= CSR_APP_CMD;
+					respondR1(resp);
+					return true;
+				case 1:
+				case 5:
+				case 52:
+					tempStatus |= CSR_ILLEGAL_COMMAND;
+					return false;
+				default:
+					fprintf(stderr, "EC unknown command CMD%d\n", cmd);
+					abort();
+					break;
+			}
 		}
 	}
 	void respondR1(uint32_t resp[4]) {
-		resp[0] = cardStatus | errorStatus;
-		errorStatus = 0;
+		resp[0] = cardStatus | tempStatus;
+		tempStatus = 0;
+	}
+	void respondR3(uint32_t resp[4], uint32_t ocr) {
+		resp[0] = ocr;
+	}
+	void respondR7(uint32_t resp[4], uint8_t ck) {
+		resp[0] = 0x100 | ck;
+	}
+	void setState(uint32_t newState) {
+		cardStatus = (cardStatus & ~CSR_CURRENT_STATE) | newState;
 	}
 private:
 	uint32_t cardStatus;
-	uint32_t errorStatus;
+	uint32_t tempStatus;
+	bool expectAppCmd;
 };
 
 std::vector<char> readFileToVector(const char *path) {
