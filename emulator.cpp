@@ -1326,8 +1326,12 @@ private:
 							data |= CONTROL_REG_SBO;
 							data &= ~CONTROL_REG_SBZ;
 							controlReg = data;
-							if (data & ~(CONTROL_REG_SBZ | CONTROL_REG_SBO | CONTROL_REG_SUPPORTED))
-								core.dumpAndAbort("unsupported bits set in control register");
+							{
+								uint32_t unsupBits = data &
+									~(CONTROL_REG_SBZ | CONTROL_REG_SBO | CONTROL_REG_SUPPORTED);
+								if (unsupBits)
+									core.dumpAndAbort("unsupported bits set in control register %08x", unsupBits);
+							}
 							break;
 						default:
 							core.dumpAndAbort("CP15 unknown opcode_2");
