@@ -1922,9 +1922,17 @@ private:
 	public:
 		using Peripheral::Peripheral;
 		void reset() override {
+			enabledInterrupts = 0;
+			modeRegster = 0;
+			statusRegister = 0xC0E5;
+			argumentRegister = 0;
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x40:
+					return statusRegister;
+				case 0x4C:
+					return enabledInterrupts;
 				case 0xFC: // version
 					return 0x100;
 				default:
@@ -1935,10 +1943,25 @@ private:
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
 			switch (addr) {
 				case 0x00: // control register
-					fprintf(stderr, "TODO: write to MCI control reg\n");
+					if (val & 0x80)
+						reset();
 					break;
 				case 0x04: // mode register
 					modeRegster = val;
+					break;
+				case 0x0C: // SD card register
+					break;
+				case 0x10: // argument register
+					argumentRegister = val;
+					break;
+				case 0x14: // command register
+					fprintf(stderr, ">>> TODO: MCI command register %08x\n", val);
+					break;
+				case 0x44:
+					enabledInterrupts |= val;
+					break;
+				case 0x48:
+					enabledInterrupts &= ~val;
 					break;
 				default:
 					core().dumpAndAbort("MCI write %04x value %08x", addr, val);
@@ -1946,7 +1969,10 @@ private:
 			}
 		}
 	private:
+		uint32_t enabledInterrupts;
 		uint32_t modeRegster;
+		uint32_t statusRegister;
+		uint32_t argumentRegister;
 	};
 private:
 	ARM920T *corePtr;
