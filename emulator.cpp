@@ -1521,7 +1521,7 @@ public:
 		}
 	}
 	struct MMCCard {
-		virtual void doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) = 0;
+		virtual bool doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) = 0;
 	};
 private:
 	class SystemInterrupt {
@@ -1928,7 +1928,8 @@ private:
 	class MCI : public Peripheral {
 		enum MCIStatus{
 			MCI_STATUS_CMDRDY = 1 << 0,
-			MCI_STATUS_ALL = MCI_STATUS_CMDRDY,
+			MCI_STATUS_RTOE = 1 << 20,
+			MCI_STATUS_ALL = MCI_STATUS_CMDRDY | MCI_STATUS_RTOE,
 		};
 		struct MCIRequest {
 			uint32_t modeRegister;
@@ -1987,7 +1988,7 @@ private:
 							req.modeRegister = modeRegister;
 							req.argumentRegister = argumentRegister;
 							req.commandRegister = val;
-							statusRegister &= ~MCI_STATUS_CMDRDY;
+							statusRegister &= ~(MCI_STATUS_CMDRDY | MCI_STATUS_RTOE);
 							emitInterruptState();
 							mmcSignal.notify_all();
 						}
@@ -2027,11 +2028,14 @@ private:
 					core().dumpAndAbort("MCI non-zero block length not implemented");
 				if (req.commandRegister & 0x30000)
 					core().dumpAndAbort("transfer dirs not implemented");
-				mmcCard->doTransaction(
+				bool responded = mmcCard->doTransaction(
 						req.commandRegister & 0x3F,
 						req.argumentRegister,
 						responseBuffer);
-				responseOffset = 0;
+				if (responded || (req.commandRegister & 0xC0) == 0)
+					responseOffset = 0;
+				else
+					statusRegister |= MCI_STATUS_RTOE;
 			}
 		}
 		void setCard(MMCCard& card) {
@@ -2069,14 +2073,13 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 public:
 	void reset() {
 	}
-	void doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) {
+	bool doTransaction(unsigned int cmd, unsigned int arg, uint32_t resp[4]) {
 		switch (cmd) {
 			case 0:
 				reset();
-				break;
+				return true;
 			case 52:
-				std::fill(resp, resp + 4, 0);
-				break;
+				return false;
 			default:
 				fprintf(stderr, "EC unknown command %d\n", cmd);
 				abort();
