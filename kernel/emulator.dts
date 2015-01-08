@@ -90,6 +90,6 @@
 /* overridden */
 / {
 	chosen {
-		bootargs = "earlyprintk keep_bootcon debug console=ttyS0";
+		bootargs = "earlyprintk keep_bootcon debug console=ttyS0 root=/dev/mmcblk0 rootwait";
 	};
 };
