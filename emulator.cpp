@@ -1423,6 +1423,7 @@ public:
 		systemPeripherals[0x1] = &interruptController;
 		systemPeripherals[0x2] = &debugUnit;
 		systemPeripherals[0x3] = &debugUnit;
+		systemPeripherals[0xC] = &powerManager;
 		systemPeripherals[0xD] = &systemTimer;
 		userPeripherals[0xD] = &mmcInterface;
 	}
@@ -1884,6 +1885,39 @@ private:
 		std::condition_variable timerThreadSignal;
 		std::thread timerThread{&ST::timerLoop, this};
 	};
+	class PMC : public Peripheral {
+	public:
+		using Peripheral::Peripheral;
+		void reset() override {
+			enabledInterrupts = 0;
+		}
+		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
+			switch (addr) {
+				case 0x68:
+					return -1u;
+				case 0x6C:
+					return enabledInterrupts;
+				default:
+					core().dumpAndAbort("PMC read %04x", addr);
+					break;
+			}
+		}
+		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
+			switch (addr) {
+				case 0x04:
+					// TODO: disable clocks
+					break;
+				case 0x64:
+					enabledInterrupts &= ~val;
+					break;
+				default:
+					core().dumpAndAbort("PMC write %04x value %08x", addr, val);
+					break;
+			}
+		}
+	private:
+		uint32_t enabledInterrupts;
+	};
 	class MCI : public Peripheral {
 	public:
 		using Peripheral::Peripheral;
@@ -1920,6 +1954,7 @@ private:
 	DBGU debugUnit{*this, 0xFFFFF200};
 	MCI mmcInterface{*this, 0xFFFB4000};
 	ST systemTimer{*this, 0xFFFFFD00};
+	PMC powerManager{*this, 0xFFFFFC00};
 	SystemInterrupt systemInterrupt{*this};
 	std::recursive_mutex irqMutex;
 };
