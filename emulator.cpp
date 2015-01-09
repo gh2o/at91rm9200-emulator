@@ -2160,8 +2160,7 @@ private:
 					argumentRegister = val;
 					break;
 				case 0x14: // command register
-					{
-						std::unique_lock<std::mutex> lock(mmcMutex);
+					runLockedAndNotify([this, val](){
 						if (statefulStatus & MCI_STATUS_CMDRDY) {
 							auto& req = currentRequest;
 							req.modeRegister = modeRegister;
@@ -2169,9 +2168,8 @@ private:
 							req.commandRegister = val;
 							statefulStatus &= ~(MCI_STATUS_CMDRDY | MCI_STATUS_RTOE);
 							emitInterruptState();
-							mmcSignal.notify_all();
 						}
-					}
+					});
 					break;
 				case 0x18: // reserved
 					break;
@@ -2189,30 +2187,41 @@ private:
 					dmaRcvAddr = val;
 					break;
 				case 0x104:
-					dmaRcvCount = val;
-					statefulStatus &= ~MCI_STATUS_ENDRX;
+					runLockedAndNotify([this, val]() {
+						dmaRcvCount = val;
+						statefulStatus &= ~MCI_STATUS_ENDRX;
+					});
 					break;
 				case 0x108:
 					dmaTrxAddr = val;
 					break;
 				case 0x10C:
-					dmaTrxCount = val;
-					statefulStatus &= ~MCI_STATUS_ENDTX;
+					runLockedAndNotify([this, val]() {
+						dmaTrxCount = val;
+						statefulStatus &= ~MCI_STATUS_ENDTX;
+					});
 					break;
 				case 0x120:
-					if (val & 0x2)
-						dmaRcvEnabled = false;
-					else if (val & 0x1)
-						dmaRcvEnabled = true;
-					if (val & 0x200)
-						dmaTrxEnabled = false;
-					else if (val & 0x100)
-						dmaTrxEnabled = true;
+					runLockedAndNotify([this, val]() {
+						if (val & 0x2)
+							dmaRcvEnabled = false;
+						else if (val & 0x1)
+							dmaRcvEnabled = true;
+						if (val & 0x200)
+							dmaTrxEnabled = false;
+						else if (val & 0x100)
+							dmaTrxEnabled = true;
+					});
 					break;
 				default:
 					core().dumpAndAbort("MCI write %04x value %08x", addr, val);
 					break;
 			}
+		}
+		template<typename Func> void runLockedAndNotify(Func func) {
+			std::unique_lock<std::mutex> lock(mmcMutex);
+			func();
+			mmcSignal.notify_all();
 		}
 		void emitInterruptState() {
 			intf.interruptController.setInterruptState(
