@@ -118,6 +118,9 @@ public:
 				case TICK_ERROR_DATA_ABORT:
 					prepareInterrupt(0x10, CPU_MODE_ABT | PSR_BITS_I, currentTick.curPC + 8);
 					break;
+				case TICK_ERROR_PREFETCH_ABORT:
+					prepareInterrupt(0x0C, CPU_MODE_ABT | PSR_BITS_I, currentTick.curPC + 4);
+					break;
 				default:
 					dumpAndAbort("unknown tick error %d", currentTick.tickError);
 					break;
