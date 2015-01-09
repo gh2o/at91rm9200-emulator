@@ -2008,6 +2008,7 @@ private:
 	class MCI : public Peripheral {
 		enum MCIStatus{
 			MCI_STATUS_CMDRDY = 1 << 0,
+			MCI_STATUS_BLKE = 1 << 3,
 			MCI_STATUS_NOTBUSY = 1 << 5,
 			MCI_STATUS_ENDRX = 1 << 6,
 			MCI_STATUS_ENDTX = 1 << 7,
@@ -2019,7 +2020,8 @@ private:
 			MCI_STATUS_OVRE = 1 << 30,
 			MCI_STATUS_UNRE = 1 << 31,
 			MCI_STATUS_ALL =
-				MCI_STATUS_CMDRDY | MCI_STATUS_NOTBUSY | MCI_STATUS_ENDRX | MCI_STATUS_ENDTX |
+				MCI_STATUS_CMDRDY | MCI_STATUS_NOTBUSY | MCI_STATUS_BLKE |
+				MCI_STATUS_ENDRX | MCI_STATUS_ENDTX |
 				MCI_STATUS_RXBUFF | MCI_STATUS_TXBUFE |
 				MCI_STATUS_RTOE | MCI_STATUS_DCRCE | MCI_STATUS_DTOE |
 				MCI_STATUS_OVRE | MCI_STATUS_UNRE
@@ -2059,7 +2061,11 @@ private:
 				case 0x2C:
 					return responseBuffer[responseOffset++ & 3];
 				case 0x40:
-					return getStatusRegister();
+				{
+					uint32_t sr = getStatusRegister();
+					statefulStatus &= ~MCI_STATUS_BLKE;
+					return sr;
+				}
 				case 0x4C:
 					return enabledInterrupts;
 				case 0xFC: // version
@@ -2117,6 +2123,13 @@ private:
 				case 0x104:
 					dmaRcvCount = val;
 					statefulStatus &= ~MCI_STATUS_ENDRX;
+					break;
+				case 0x108:
+					dmaTrxAddr = val;
+					break;
+				case 0x10C:
+					dmaTrxCount = val;
+					statefulStatus &= ~MCI_STATUS_ENDTX;
 					break;
 				case 0x120:
 					if (val & 0x2)
