@@ -1,6 +1,8 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <assert.h>
+#include <signal.h>
+#include <termios.h>
 #include <unistd.h>
 #include <algorithm>
 #include <iostream>
@@ -25,6 +27,8 @@ static inline int leftMostBit(unsigned int val) {
 static inline int rightMostBit(unsigned int val) {
 	return __builtin_ctz(val);
 }
+
+void setupTTY(bool initialize);
 
 class ARM920T {
 public:
@@ -926,6 +930,8 @@ public:
 	}
 	__attribute__((noreturn, format(printf, 2, 3)))
 	void dumpAndAbort(const char *format, ...) {
+		// clean up terminal mode
+		setupTTY(false);
 		// print message line
 		fprintf(stderr, "Abort: ");
 		va_list args;
@@ -2680,6 +2686,18 @@ void coreMainLoop(ARM920T* coreptr) {
 		core.tick();
 }
 
+void setupTTY(bool initialize) {
+	static termios origTerm;
+	if (initialize) {
+		tcgetattr(0, &origTerm);
+		termios newTerm = origTerm;
+		cfmakeraw(&newTerm);
+		tcsetattr(0, TCSANOW, &newTerm);
+	} else {
+		tcsetattr(0, TCSANOW, &origTerm);
+	}
+}
+
 int main(int argc, char *argv[]) {
 
 	if (argc != 4) {
@@ -2730,10 +2748,17 @@ int main(int argc, char *argv[]) {
 	core.writeRegister(2, AT91RM9200Interface::systemMemoryBase + dtbStart);
 	core.setPC(AT91RM9200Interface::systemMemoryBase + kernelStart);
 
+	// set up terminal
+	setupTTY(true);
+
 	// start CPU in background thread
 	std::thread coreThread(coreMainLoop, &core);
 
-	// wait forever
+	// wait for signal
+	auto cleanupHandler = [](int){ setupTTY(false); };
+	signal(SIGINT, cleanupHandler);
+	signal(SIGTERM, cleanupHandler);
+	signal(SIGABRT, cleanupHandler);
 	pause();
 
 }
