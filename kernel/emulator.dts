@@ -97,6 +97,6 @@
 /* overridden */
 / {
 	chosen {
-		bootargs = "earlyprintk debug console=ttyS0 rw root=/dev/mmcblk0 rootwait user_debug=255";
+		bootargs = "earlyprintk debug console=ttyS0 ro root=/dev/mmcblk0 rootwait user_debug=255";
 	};
 };
