@@ -1,4 +1,0 @@
-#!/bin/sh
-cd "$(dirname "$0")"
-cpp -x assembler-with-cpp -I source/include -nostdinc emulator.dts | \
-	./build/scripts/dtc/dtc -o emulator.dtb -O dtb -S 4096
