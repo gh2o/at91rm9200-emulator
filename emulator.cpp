@@ -1216,8 +1216,11 @@ private:
 					default:
 						core.dumpAndAbort("unknown pcheck!");
 				}
-				if (!accessAllowed)
-					core.dumpAndAbort("denied access to addr %08x -> %08x", addr, newaddr);
+				if (!accessAllowed) {
+					recordFault(addr, desc1type == 2 ? 0xD : 0xF, domain);
+					errorOccurred = true;
+					return 0;
+				}
 			}
 			// done!
 			return newaddr;
