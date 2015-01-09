@@ -1050,9 +1050,16 @@ private:
 	class RegisterFile {
 	public:
 		RegisterFile(ARM920T& core) : core(core) {
-			registerView[15] = &programCounter;
 			for (int i = 0; i <= 7; i++)
-				registerView[i] = &(nonBanked[i]);
+				userRegsView[i] = &(nonBanked[i]);
+			for (int i = 8; i <= 12; i++)
+				userRegsView[i] = &(fiqBanked[i - 8][0]);
+			for (int i = 13; i <= 14; i++)
+				userRegsView[i] = &(allBanked[i - 13][0]);
+			userRegsView[15] = &programCounter;
+			std::copy(std::begin(userRegsView), std::end(userRegsView),
+					registerView);
+			reset();
 		}
 		void reset() {
 			writeCPSR(CPU_MODE_SVC | PSR_BITS_F | PSR_BITS_I);
@@ -1099,6 +1106,16 @@ private:
 		void writeRegister(uint32_t reg, uint32_t val) {
 			*(registerView[reg]) = val;
 		}
+		uint32_t readRegisterUser(uint32_t reg) {
+			uint32_t *regPtr = userRegsView[reg];
+			if (regPtr == &programCounter)
+				return programCounter + 4;
+			else
+				return *regPtr;
+		}
+		void writeRegisterUser(uint32_t reg, uint32_t val) {
+			*(userRegsView[reg]) = val;
+		}
 		uint32_t getProgramCounter() {
 			return programCounter;
 		}
@@ -1114,6 +1131,7 @@ private:
 		uint32_t allBanked[2][16];
 		uint32_t programCounter;
 		uint32_t *registerView[16];
+		uint32_t *userRegsView[16];
 		uint32_t *curSPSRView;
 	};
 	class MemoryController {
