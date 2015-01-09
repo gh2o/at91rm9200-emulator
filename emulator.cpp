@@ -63,6 +63,7 @@ public:
 		TICK_ERROR_NONE = 0,
 		TICK_ERROR_PREFETCH_ABORT,
 		TICK_ERROR_DATA_ABORT,
+		TICK_ERROR_SOFTWARE_INTERRUPT,
 	};
 	enum PendingOperation {
 		PENDING_OPERATION_NONE = 0,
@@ -120,6 +121,9 @@ public:
 					break;
 				case TICK_ERROR_PREFETCH_ABORT:
 					prepareInterrupt(0x0C, CPU_MODE_ABT | PSR_BITS_I, currentTick.curPC + 4);
+					break;
+				case TICK_ERROR_SOFTWARE_INTERRUPT:
+					prepareInterrupt(0x08, CPU_MODE_SVC | PSR_BITS_I, currentTick.curPC + 4);
 					break;
 				default:
 					dumpAndAbort("unknown tick error %d", currentTick.tickError);
@@ -403,7 +407,7 @@ public:
 						}
 						break;
 					default:
-						dumpAndAbort("decode 7.%d unknown", dec2);
+						currentTick.tickError = TICK_ERROR_SOFTWARE_INTERRUPT;
 						break;
 				}
 				break;
