@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <queue>
 #include <memory>
 #include <thread>
 #include <atomic>
@@ -1569,6 +1570,7 @@ private:
 		// IRQ line 1
 		enum InterruptSource {
 			INTERRUPT_SOURCE_SYSTEM_CLOCK,
+			INTERRUPT_SOURCE_DEBUG_UNIT,
 		};
 		SystemInterrupt(AT91RM9200Interface& intf) : intf(intf) {}
 		void reset() {
@@ -1605,12 +1607,21 @@ private:
 		uint32_t baseaddr;
 	};
 	class DBGU : public Peripheral {
+		enum DBGUStatus {
+			DBGU_SR_TXEMPTY = 1 << 9,
+			DBGU_SR_TXRDY = 1 << 1,
+			DBGU_SR_RXRDY = 1 << 0,
+		};
 	public:
 		using Peripheral::Peripheral;
 		void reset() override {
 			enabledInterrupts = 0;
+			statusRegister = DBGU_SR_TXEMPTY | DBGU_SR_TXRDY; // always ready to transmit
 			modeRegister = 0;
 			baudDivider = 16;
+			emitInterruptState();
+			if (!ioThread.joinable())
+				ioThread = std::thread(&DBGU::ioLoop, this);
 		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
@@ -1619,7 +1630,9 @@ private:
 				case 0x10: // mask register
 					return enabledInterrupts;
 				case 0x14: // status register
-					return 0x0202;
+					return statusRegister;
+				case 0x18: // receive register
+					return receiveCharacter();
 				case 0x1C: // transmit register
 					return 0;
 				case 0x20: // baudrate
@@ -1651,7 +1664,7 @@ private:
 					enabledInterrupts &= ~val;
 					break;
 				case 0x1C: // transmit register
-					fputc(val, stdout);
+					transmitCharacter(val & 0xFF);
 					break;
 				case 0x20: // baudrate
 					baudDivider = val;
@@ -1663,10 +1676,50 @@ private:
 					break;
 			}
 		}
+		uint8_t receiveCharacter() {
+			std::unique_lock<std::mutex> lock(ioMutex);
+			if (receiverQueue.empty())
+				return 0;
+			uint32_t result = receiverQueue.front();
+			receiverQueue.pop();
+			if (receiverQueue.empty()) {
+				statusRegister &= ~DBGU_SR_RXRDY;
+				emitInterruptState();
+			}
+			return result;
+		}
+		void transmitCharacter(uint8_t chr) {
+			write(1, &chr, 1);
+		}
+		void emitInterruptState() {
+			intf.systemInterrupt.setInterruptState(
+					SystemInterrupt::INTERRUPT_SOURCE_DEBUG_UNIT,
+					enabledInterrupts & statusRegister);
+		}
+		void ioLoop() {
+			constexpr size_t bufsiz = 4096;
+			std::unique_ptr<uint8_t[]> buffer(new uint8_t[bufsiz]);
+			while (true) {
+				ssize_t count = read(0, buffer.get(), bufsiz);
+				{
+					std::unique_lock<std::mutex> lock(ioMutex);
+					for (ssize_t i = 0; i < count; i++)
+						receiverQueue.push(buffer[i]);
+					if (count) {
+						statusRegister |= DBGU_SR_RXRDY;
+						emitInterruptState();
+					}
+				}
+			}
+		}
 	private:
 		uint32_t enabledInterrupts;
+		uint32_t statusRegister;
 		uint32_t modeRegister;
 		uint32_t baudDivider;
+		std::queue<uint8_t> receiverQueue;
+		std::mutex ioMutex;
+		std::thread ioThread;
 	};
 	class AIC : public Peripheral {
 	public:
