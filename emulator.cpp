@@ -2317,6 +2317,7 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 	enum CSR {
 		CSR_ILLEGAL_COMMAND = 1 << 22,
 		CSR_APP_CMD = 1 << 5,
+		CSR_READY_FOR_DATA = 1 << 8,
 		CSR_CURRENT_STATE = 0xF << 9,
 		CSR_CURRENT_STATE_IDLE = 0 << 9,
 		CSR_CURRENT_STATE_READY = 1 << 9,
@@ -2350,7 +2351,7 @@ public:
 		}
 	}
 	void reset() {
-		cardStatus = 0;
+		cardStatus = CSR_READY_FOR_DATA;
 		tempStatus = 0;
 		expectAppCmd = false;
 		dataCommand = DATA_CMD_NONE;
