@@ -1567,6 +1567,7 @@ public:
 	struct MMCCard {
 		virtual bool doCommand(unsigned int cmd, unsigned int arg, uint32_t resp[4]) = 0;
 		virtual size_t doRead(uint8_t *buf, size_t siz) = 0;
+		virtual size_t doWrite(const uint8_t *buf, size_t siz) = 0;
 	};
 private:
 	class SystemInterrupt {
@@ -2238,7 +2239,24 @@ private:
 							emitInterruptState();
 						}
 					} else {
-						core().dumpAndAbort("MCI data write");
+						uint32_t bytesReqd = std::min(dmaTrxCount << 2, blockLength);
+						uint32_t wordsReqd = bytesReqd >> 2;
+						std::unique_ptr<uint32_t[]> tmpBuffer(new uint32_t[bytesReqd]);
+						bool errorOccurred = false;
+						for (size_t i = 0; i < wordsReqd; i++) {
+							tmpBuffer[i] = htole32(intf.readWordPhysical(dmaTrxAddr, errorOccurred));
+							dmaTrxAddr += 4;
+							dmaTrxCount -= 1;
+						}
+						size_t bytesWritten = mmcCard->doWrite((const uint8_t *)tmpBuffer.get(), bytesReqd);
+						if (dmaTrxCount == 0) {
+							statefulStatus |= MCI_STATUS_ENDTX;
+							emitInterruptState();
+						}
+						if (bytesWritten == blockLength) {
+							statefulStatus |= MCI_STATUS_BLKE;
+							emitInterruptState();
+						}
 					}
 					if (dataTransfer == DATA_XFER_SINGLE_BLOCK)
 						dataTransfer = DATA_XFER_NONE;
@@ -2313,6 +2331,7 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 		DATA_CMD_SEND_SCR,
 		DATA_CMD_SD_STATUS,
 		DATA_CMD_READ_MULTIPLE_BLOCK,
+		DATA_CMD_WRITE_MULTIPLE_BLOCK,
 	};
 public:
 	EmulatedCard(const char *path) : imageFile(path, IMAGE_FLAGS) {
@@ -2429,6 +2448,17 @@ public:
 					} else {
 						return false;
 					}
+				case 25:
+					if (getState() == CSR_CURRENT_STATE_TRAN) {
+						setState(CSR_CURRENT_STATE_RCV);
+						dataCommand = DATA_CMD_WRITE_MULTIPLE_BLOCK;
+						currentSector = arg;
+						dataOffset = 0;
+						respondR1(resp);
+						return true;
+					} else {
+						return false;
+					}
 				case 55:
 					expectAppCmd = true;
 					tempStatus |= CSR_APP_CMD;
@@ -2517,7 +2547,6 @@ public:
 				bytesRead = std::min(siz, size_t(512 - dataOffset));
 				imageFile.seekg((currentSector << 9) + dataOffset);
 				imageFile.read((char *)buf, bytesRead);
-				assert(size_t(imageFile.gcount()) == bytesRead);
 				dataOffset += bytesRead;
 				operationDone = false;
 				if (dataOffset == 512) {
@@ -2533,6 +2562,30 @@ public:
 		if (operationDone)
 			setState(CSR_CURRENT_STATE_TRAN);
 		return bytesRead;
+	}
+	size_t doWrite(const uint8_t *buf, size_t siz) override {
+		size_t bytesWritten;
+		bool operationDone;
+		switch (dataCommand) {
+			case DATA_CMD_WRITE_MULTIPLE_BLOCK:
+				bytesWritten = std::min(siz, size_t(512 - dataOffset));
+				imageFile.seekp((currentSector << 9) + dataOffset);
+				imageFile.write((const char *)buf, bytesWritten);
+				dataOffset += bytesWritten;
+				operationDone = false;
+				if (dataOffset == 512) {
+					currentSector++;
+					dataOffset = 0;
+				}
+				break;
+			default:
+				fprintf(stderr, "EC unknown write data\n");
+				abort();
+				break;
+		}
+		if (operationDone)
+			setState(CSR_CURRENT_STATE_TRAN);
+		return bytesWritten;
 	}
 private:
 	std::fstream imageFile;
