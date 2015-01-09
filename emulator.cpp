@@ -2231,6 +2231,7 @@ private:
 					10, enabledInterrupts & getStatusRegister());
 		}
 		void mmcLoop() {
+			uint32_t addedStatus = 0;
 			uint32_t blockLength = 0;
 			bool directionRead = true;
 			auto canTransferData = [&, this](){
@@ -2245,8 +2246,9 @@ private:
 				{
 					// accept next command
 					std::unique_lock<std::mutex> lock(mmcMutex);
-					statefulStatus |= MCI_STATUS_CMDRDY;
+					statefulStatus |= MCI_STATUS_CMDRDY | addedStatus;
 					emitInterruptState();
+					addedStatus = 0;
 					while (!canTransferData() && !hasCommand) {
 						mmcSignal.wait(lock);
 						hasCommand = !(statefulStatus & MCI_STATUS_CMDRDY);
@@ -2263,8 +2265,7 @@ private:
 						responseOffset = 0;
 					} else {
 						// no response, assume timeout
-						statefulStatus |= MCI_STATUS_RTOE;
-						emitInterruptState();
+						addedStatus |= MCI_STATUS_RTOE;
 						continue;
 					}
 					unsigned int trcmd = (incReq.commandRegister >> 16) & 3;
@@ -2308,7 +2309,7 @@ private:
 							dmaRcvCount -= 1;
 						}
 						if (dmaRcvCount == 0)
-							statefulStatus |= MCI_STATUS_ENDRX;
+							addedStatus |= MCI_STATUS_ENDRX;
 					} else {
 						uint32_t bytesReqd = std::min(dmaTrxCount << 2, blockLength);
 						uint32_t wordsReqd = bytesReqd >> 2;
@@ -2321,13 +2322,12 @@ private:
 						}
 						size_t bytesWritten = mmcCard->doWrite((const uint8_t *)tmpBuffer.get(), bytesReqd);
 						if (dmaTrxCount == 0)
-							statefulStatus |= MCI_STATUS_ENDTX;
+							addedStatus |= MCI_STATUS_ENDTX;
 						if (bytesWritten == blockLength)
-							statefulStatus |= MCI_STATUS_BLKE;
+							addedStatus |= MCI_STATUS_BLKE;
 					}
 					if (dataTransfer == DATA_XFER_SINGLE_BLOCK)
 						dataTransfer = DATA_XFER_NONE;
-					emitInterruptState();
 				}
 			}
 		}
