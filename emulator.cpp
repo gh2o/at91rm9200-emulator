@@ -2242,15 +2242,14 @@ private:
 				{
 					// accept next command
 					std::unique_lock<std::mutex> lock(mmcMutex);
+					statefulStatus |= MCI_STATUS_CMDRDY;
+					emitInterruptState();
 					while (!canTransferData() && !hasCommand) {
 						mmcSignal.wait(lock);
 						hasCommand = !(statefulStatus & MCI_STATUS_CMDRDY);
 					}
-					if (hasCommand) {
+					if (hasCommand)
 						incReq = currentRequest;
-						statefulStatus |= MCI_STATUS_CMDRDY;
-						emitInterruptState();
-					}
 				}
 				if (hasCommand) {
 					bool responded = mmcCard->doCommand(
