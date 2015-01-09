@@ -2132,6 +2132,7 @@ private:
 				{
 					uint32_t sr = getStatusRegister();
 					statefulStatus &= ~MCI_STATUS_BLKE;
+					emitInterruptState();
 					return sr;
 				}
 				case 0x4C:
@@ -2187,17 +2188,15 @@ private:
 					dmaRcvAddr = val;
 					break;
 				case 0x104:
-					runLockedAndNotify([this, val]() {
-						dmaRcvCount = val;
-					});
+					runLockedAndNotify([this, val]() { dmaRcvCount = val; });
+					emitInterruptState();
 					break;
 				case 0x108:
 					dmaTrxAddr = val;
 					break;
 				case 0x10C:
-					runLockedAndNotify([this, val]() {
-						dmaTrxCount = val;
-					});
+					runLockedAndNotify([this, val]() { dmaTrxCount = val; });
+					emitInterruptState();
 					break;
 				case 0x120:
 					runLockedAndNotify([this, val]() {
@@ -2313,13 +2312,12 @@ private:
 							dmaTrxCount -= 1;
 						}
 						size_t bytesWritten = mmcCard->doWrite((const uint8_t *)tmpBuffer.get(), bytesReqd);
-						if (bytesWritten == blockLength) {
+						if (bytesWritten == blockLength)
 							statefulStatus |= MCI_STATUS_BLKE;
-							emitInterruptState();
-						}
 					}
 					if (dataTransfer == DATA_XFER_SINGLE_BLOCK)
 						dataTransfer = DATA_XFER_NONE;
+					emitInterruptState();
 				}
 			}
 		}
