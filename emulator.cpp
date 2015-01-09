@@ -1612,17 +1612,30 @@ private:
 	class DBGU : public Peripheral {
 	public:
 		using Peripheral::Peripheral;
+		void reset() override {
+			enabledInterrupts = 0;
+			modeRegister = 0;
+			baudDivider = 16;
+		}
 		uint32_t readRegister(uint32_t addr, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x04: // mode register
+					return modeRegister;
+				case 0x10: // mask register
+					return enabledInterrupts;
 				case 0x14: // status register
 					return 0x0202;
 				case 0x1C: // transmit register
 					return 0;
 				case 0x20: // baudrate
-					return 1;
+					return baudDivider;
 				case 0x40: // ID register
 					return 0x09290781;
 				case 0x44: // EXID register
+					return 0;
+				case 0xF0: // IP name
+					return 0x44424755;
+				case 0x124: // PDC status
 					return 0;
 				default:
 					core().dumpAndAbort("DBGU read %02x", addr);
@@ -1631,14 +1644,34 @@ private:
 		}
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
 			switch (addr) {
+				case 0x00: // control register
+					break;
+				case 0x04: // mode register
+					modeRegister = val & 0xCE00;
+					break;
+				case 0x08: // interrupt enable
+					enabledInterrupts |= val;
+					break;
+				case 0x0C: // interrupt disable
+					enabledInterrupts &= ~val;
+					break;
 				case 0x1C: // transmit register
 					fputc(val, stdout);
+					break;
+				case 0x20: // baudrate
+					baudDivider = val;
+					break;
+				case 0x120: // PDC control
 					break;
 				default:
 					core().dumpAndAbort("DBGU write %02x", addr);
 					break;
 			}
 		}
+	private:
+		uint32_t enabledInterrupts;
+		uint32_t modeRegister;
+		uint32_t baudDivider;
 	};
 	class AIC : public Peripheral {
 	public:
