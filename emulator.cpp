@@ -2188,14 +2188,20 @@ private:
 					dmaRcvAddr = val;
 					break;
 				case 0x104:
-					runLockedAndNotify([this, val]() { dmaRcvCount = val; });
+					runLockedAndNotify([this, val]() {
+						dmaRcvCount = val;
+						statefulStatus &= ~MCI_STATUS_ENDRX;
+					});
 					emitInterruptState();
 					break;
 				case 0x108:
 					dmaTrxAddr = val;
 					break;
 				case 0x10C:
-					runLockedAndNotify([this, val]() { dmaTrxCount = val; });
+					runLockedAndNotify([this, val]() {
+						dmaTrxCount = val;
+						statefulStatus &= ~MCI_STATUS_ENDTX;
+					});
 					emitInterruptState();
 					break;
 				case 0x120:
@@ -2301,6 +2307,8 @@ private:
 							dmaRcvAddr += 4;
 							dmaRcvCount -= 1;
 						}
+						if (dmaRcvCount == 0)
+							statefulStatus |= MCI_STATUS_ENDRX;
 					} else {
 						uint32_t bytesReqd = std::min(dmaTrxCount << 2, blockLength);
 						uint32_t wordsReqd = bytesReqd >> 2;
@@ -2312,6 +2320,8 @@ private:
 							dmaTrxCount -= 1;
 						}
 						size_t bytesWritten = mmcCard->doWrite((const uint8_t *)tmpBuffer.get(), bytesReqd);
+						if (dmaTrxCount == 0)
+							statefulStatus |= MCI_STATUS_ENDTX;
 						if (bytesWritten == blockLength)
 							statefulStatus |= MCI_STATUS_BLKE;
 					}
@@ -2327,9 +2337,9 @@ private:
 		uint32_t getStatusRegister() {
 			uint32_t res = statefulStatus;
 			if (dmaTrxCount == 0)
-				res |= MCI_STATUS_TXBUFE | MCI_STATUS_ENDTX;
+				res |= MCI_STATUS_TXBUFE;
 			if (dmaRcvCount == 0)
-				res |= MCI_STATUS_RXBUFF | MCI_STATUS_ENDRX;
+				res |= MCI_STATUS_RXBUFF;
 			return res;
 		}
 	private:
