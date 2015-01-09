@@ -2072,21 +2072,27 @@ private:
 		}
 		void mmcLoop() {
 			uint32_t blockLength = 0;
-			bool directionRead;
+			bool directionRead = true;
+			auto canTransferData = [&, this](){
+				return (dataTransfer != DATA_XFER_NONE) && (
+					(directionRead && dmaRcvCount) ||
+					(!directionRead && dmaTrxCount)
+				);
+			};
 			while (true) {
 				bool hasCommand = false;
 				MCIRequest incReq;
 				{
 					// accept next command
 					std::unique_lock<std::mutex> lock(mmcMutex);
-					if (dataTransfer == DATA_XFER_NONE) {
+					if (canTransferData()) {
+						// only poll for command
+						hasCommand = !(statefulStatus & MCI_STATUS_CMDRDY);
+					} else {
 						// wait for next command
 						while (statefulStatus & MCI_STATUS_CMDRDY)
 							mmcSignal.wait(lock);
 						hasCommand = true;
-					} else {
-						// only poll for command
-						hasCommand = !(statefulStatus & MCI_STATUS_CMDRDY);
 					}
 					if (hasCommand) {
 						incReq = currentRequest;
@@ -2135,7 +2141,7 @@ private:
 						core().dumpAndAbort("MCI stop data transfer");
 					}
 				}
-				if (dataTransfer != DATA_XFER_NONE) {
+				if (canTransferData()) {
 					if (directionRead) {
 						uint32_t bytesReqd = std::min(dmaRcvCount << 2, blockLength);
 						std::unique_ptr<uint32_t[]> tmpBuffer(new uint32_t[bytesReqd]);
