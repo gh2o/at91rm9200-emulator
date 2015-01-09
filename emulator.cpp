@@ -2109,8 +2109,8 @@ private:
 			bool directionRead = true;
 			auto canTransferData = [&, this](){
 				return (dataTransfer != DATA_XFER_NONE) && (
-					(directionRead && dmaRcvCount) ||
-					(!directionRead && dmaTrxCount)
+					(directionRead && dmaRcvEnabled && dmaRcvCount) ||
+					(!directionRead && dmaTrxEnabled && dmaTrxCount)
 				);
 			};
 			while (true) {
