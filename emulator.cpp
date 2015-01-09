@@ -2738,7 +2738,7 @@ int main(int argc, char *argv[]) {
 
 	// initialize interface
 	AT91RM9200Interface interface(card);
-	interface.allocateSystemMemory(64 * 1024 * 1024);
+	interface.allocateSystemMemory(256 * 1024 * 1024);
 
 	// initialize core
 	ARM920T core(interface);
