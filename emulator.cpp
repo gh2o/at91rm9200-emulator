@@ -1659,9 +1659,11 @@ private:
 					break;
 				case 0x08: // interrupt enable
 					enabledInterrupts |= val;
+					emitInterruptState();
 					break;
 				case 0x0C: // interrupt disable
 					enabledInterrupts &= ~val;
+					emitInterruptState();
 					break;
 				case 0x1C: // transmit register
 					transmitCharacter(val & 0xFF);
