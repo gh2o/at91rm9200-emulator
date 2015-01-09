@@ -2157,28 +2157,6 @@ private:
 					if (dataTransfer == DATA_XFER_SINGLE_BLOCK)
 						dataTransfer = DATA_XFER_NONE;
 				}
-#if 0
-				if (trcmd == 1) {
-					if (trdir) {
-						uint32_t bytesReqd = std::min(dmaRcvCount << 2, blklen);
-						std::unique_ptr<uint32_t[]> tmpBuffer(new uint32_t[bytesReqd]);
-						size_t bytesRead = mmcCard->doRead((uint8_t *)tmpBuffer.get(), bytesReqd);
-						size_t wordsRead = bytesRead >> 2;
-						bool errorOccurred = false;
-						for (size_t i = 0; i < wordsRead; i++) {
-							intf.writeWordPhysical(dmaRcvAddr, le32toh(tmpBuffer[i]), errorOccurred);
-							dmaRcvAddr += 4;
-							dmaRcvCount -= 1;
-						}
-						if (dmaRcvCount == 0)
-							statefulStatus |= MCI_STATUS_ENDRX;
-					} else {
-						core().dumpAndAbort("MCI data write");
-					}
-				} else if (trcmd == 2) {
-					core().dumpAndAbort("MCI stop data transfer");
-				}
-#endif
 			}
 		}
 		void setCard(MMCCard& card) {
