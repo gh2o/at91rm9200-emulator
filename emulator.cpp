@@ -1794,6 +1794,11 @@ private:
 				edgeStatus |= 1 << irq;
 			updateOutput();
 		}
+		void waitForInterrupt() {
+			std::unique_lock<std::recursive_mutex> lock(intf.irqMutex);
+			while (!getOutput())
+				outputSignal.wait(lock);
+		}
 	private:
 		uint32_t pendingInterrupts() const {
 			return (edgeStatus & edgeMask) | (rawInterrupts & ~edgeMask);
@@ -1801,9 +1806,13 @@ private:
 		uint32_t effectiveInterrupts() const {
 			return enabledInterrupts & pendingInterrupts();
 		}
+		bool getOutput() {
+			return effectiveInterrupts();
+		}
 		void updateOutput() {
 			std::lock_guard<std::recursive_mutex> guard(intf.irqMutex);
-			core().setIRQ(effectiveInterrupts());
+			core().setIRQ(getOutput());
+			outputSignal.notify_all();
 		}
 	private:
 		uint32_t enabledInterrupts;
@@ -1816,6 +1825,7 @@ private:
 		uint32_t sourceVectors[32];
 		uint32_t priorityMasks[8];
 		uint32_t spuriousVector;
+		std::condition_variable_any outputSignal;
 	};
 	class ST : public Peripheral {
 		typedef std::chrono::steady_clock time_clock;
@@ -1993,7 +2003,8 @@ private:
 		void writeRegister(uint32_t addr, uint32_t val, bool& errorOccurred) override {
 			switch (addr) {
 				case 0x04:
-					// TODO: disable clocks
+					if (val & 0x01)
+						intf.interruptController.waitForInterrupt();
 					break;
 				case 0x64:
 					enabledInterrupts &= ~val;
