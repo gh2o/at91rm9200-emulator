@@ -2403,6 +2403,8 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 		DATA_CMD_SD_STATUS,
 		DATA_CMD_READ_MULTIPLE_BLOCK,
 		DATA_CMD_WRITE_MULTIPLE_BLOCK,
+		DATA_CMD_READ_SINGLE_BLOCK,
+		DATA_CMD_WRITE_SINGLE_BLOCK,
 	};
 public:
 	EmulatedCard(const char *path) : imageFile(path, IMAGE_FLAGS) {
@@ -2508,10 +2510,13 @@ public:
 					dataCommand = oldDataCommand;
 					respondR1(resp);
 					return true;
+				case 17:
 				case 18:
 					if (getState() == CSR_CURRENT_STATE_TRAN) {
 						setState(CSR_CURRENT_STATE_DATA);
-						dataCommand = DATA_CMD_READ_MULTIPLE_BLOCK;
+						dataCommand = (cmd == 18) ?
+							DATA_CMD_READ_MULTIPLE_BLOCK :
+							DATA_CMD_READ_SINGLE_BLOCK;
 						currentSector = arg;
 						dataOffset = 0;
 						respondR1(resp);
@@ -2519,10 +2524,13 @@ public:
 					} else {
 						return false;
 					}
+				case 24:
 				case 25:
 					if (getState() == CSR_CURRENT_STATE_TRAN) {
 						setState(CSR_CURRENT_STATE_RCV);
-						dataCommand = DATA_CMD_WRITE_MULTIPLE_BLOCK;
+						dataCommand = (cmd == 25) ?
+							DATA_CMD_WRITE_MULTIPLE_BLOCK :
+							DATA_CMD_WRITE_SINGLE_BLOCK;
 						currentSector = arg;
 						dataOffset = 0;
 						respondR1(resp);
@@ -2614,12 +2622,13 @@ public:
 				dataOffset += bytesRead;
 				operationDone = (dataOffset == 64);
 				break;
+			case DATA_CMD_READ_SINGLE_BLOCK:
 			case DATA_CMD_READ_MULTIPLE_BLOCK:
 				bytesRead = std::min(siz, size_t(512 - dataOffset));
 				imageFile.seekg((currentSector << 9) + dataOffset);
 				imageFile.read((char *)buf, bytesRead);
 				dataOffset += bytesRead;
-				operationDone = false;
+				operationDone = (dataCommand == DATA_CMD_READ_SINGLE_BLOCK);
 				if (dataOffset == 512) {
 					currentSector++;
 					dataOffset = 0;
@@ -2638,12 +2647,13 @@ public:
 		size_t bytesWritten;
 		bool operationDone;
 		switch (dataCommand) {
+			case DATA_CMD_WRITE_SINGLE_BLOCK:
 			case DATA_CMD_WRITE_MULTIPLE_BLOCK:
 				bytesWritten = std::min(siz, size_t(512 - dataOffset));
 				imageFile.seekp((currentSector << 9) + dataOffset);
 				imageFile.write((const char *)buf, bytesWritten);
 				dataOffset += bytesWritten;
-				operationDone = false;
+				operationDone = (dataCommand == DATA_CMD_WRITE_SINGLE_BLOCK);
 				if (dataOffset == 512) {
 					currentSector++;
 					dataOffset = 0;
