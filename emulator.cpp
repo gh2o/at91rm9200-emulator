@@ -1957,6 +1957,11 @@ private:
 				MCI_STATUS_RTOE | MCI_STATUS_DCRCE | MCI_STATUS_DTOE |
 				MCI_STATUS_OVRE | MCI_STATUS_UNRE
 		};
+		enum DataTransfer {
+			DATA_XFER_NONE,
+			DATA_XFER_SINGLE_BLOCK,
+			DATA_XFER_MULTIPLE_BLOCK,
+		};
 		struct MCIRequest {
 			uint32_t modeRegister;
 			uint32_t argumentRegister;
@@ -1972,6 +1977,7 @@ private:
 			argumentRegister = 0;
 			dmaRcvEnabled = false;
 			dmaTrxEnabled = false;
+			dataTransfer = DATA_XFER_NONE;
 			emitInterruptState();
 			if (!mmcThread.joinable())
 				mmcThread = std::thread(&MCI::mmcLoop, this);
@@ -2065,32 +2071,93 @@ private:
 					10, enabledInterrupts & getStatusRegister());
 		}
 		void mmcLoop() {
+			uint32_t blockLength = 0;
+			bool directionRead;
 			while (true) {
-				MCIRequest req;
+				bool hasCommand = false;
+				MCIRequest incReq;
 				{
+					// accept next command
 					std::unique_lock<std::mutex> lock(mmcMutex);
-					statefulStatus |= MCI_STATUS_CMDRDY;
-					emitInterruptState();
-					while (statefulStatus & MCI_STATUS_CMDRDY)
-						mmcSignal.wait(lock);
-					req = currentRequest;
+					if (dataTransfer == DATA_XFER_NONE) {
+						// wait for next command
+						while (statefulStatus & MCI_STATUS_CMDRDY)
+							mmcSignal.wait(lock);
+						hasCommand = true;
+					} else {
+						// only poll for command
+						hasCommand = !(statefulStatus & MCI_STATUS_CMDRDY);
+					}
+					if (hasCommand) {
+						incReq = currentRequest;
+						statefulStatus |= MCI_STATUS_CMDRDY;
+						emitInterruptState();
+					}
 				}
-				bool responded = mmcCard->doCommand(
-						req.commandRegister & 0x3F,
-						req.argumentRegister,
-						responseBuffer);
-				if (responded) {
-					responseOffset = 0;
-				} else {
-					// no response, assume timeout
-					statefulStatus |= MCI_STATUS_RTOE;
-					continue;
+				if (hasCommand) {
+					bool responded = mmcCard->doCommand(
+							incReq.commandRegister & 0x3F,
+							incReq.argumentRegister,
+							responseBuffer);
+					if (responded) {
+						responseOffset = 0;
+					} else {
+						// no response, assume timeout
+						statefulStatus |= MCI_STATUS_RTOE;
+						emitInterruptState();
+						continue;
+					}
+					unsigned int trcmd = (incReq.commandRegister >> 16) & 3;
+					unsigned int trtyp = (incReq.commandRegister >> 19) & 3;
+					bool trdir = incReq.commandRegister & (1 << 18);
+					unsigned int blklen = (incReq.modeRegister >> 16) & 0x3FFC;
+					if (trcmd && (incReq.modeRegister & 0x8000) == 0)
+						core().dumpAndAbort("MCI only supports PDC transfers");
+					if (trcmd == 1) {
+						if (dataTransfer != DATA_XFER_NONE)
+							core().dumpAndAbort("MCI start but already started");
+						blockLength = blklen;
+						directionRead = trdir;
+						switch (trtyp) {
+							case 0:
+								dataTransfer = DATA_XFER_SINGLE_BLOCK;
+								break;
+							case 1:
+								dataTransfer = DATA_XFER_MULTIPLE_BLOCK;
+								break;
+							default:
+								core().dumpAndAbort("MCI unknown trtyp=%u", trtyp);
+								break;
+						}
+					} else if (trcmd == 2) {
+						if (dataTransfer == DATA_XFER_NONE)
+							core().dumpAndAbort("MCI stop but already stopped");
+						core().dumpAndAbort("MCI stop data transfer");
+					}
 				}
-				unsigned int trcmd = (req.commandRegister >> 16) & 3;
-				bool trdir = req.commandRegister & (1 << 18);
-				unsigned int blklen = (req.modeRegister >> 16) & 0x3FFC;
-				if (trcmd && (req.modeRegister & 0x8000) == 0)
-					core().dumpAndAbort("MCI only supports PDC transfers");
+				if (dataTransfer != DATA_XFER_NONE) {
+					if (directionRead) {
+						uint32_t bytesReqd = std::min(dmaRcvCount << 2, blockLength);
+						std::unique_ptr<uint32_t[]> tmpBuffer(new uint32_t[bytesReqd]);
+						size_t bytesRead = mmcCard->doRead((uint8_t *)tmpBuffer.get(), bytesReqd);
+						size_t wordsRead = bytesRead >> 2;
+						bool errorOccurred = false;
+						for (size_t i = 0; i < wordsRead; i++) {
+							intf.writeWordPhysical(dmaRcvAddr, le32toh(tmpBuffer[i]), errorOccurred);
+							dmaRcvAddr += 4;
+							dmaRcvCount -= 1;
+						}
+						if (dmaRcvCount == 0) {
+							statefulStatus |= MCI_STATUS_ENDRX;
+							emitInterruptState();
+						}
+					} else {
+						core().dumpAndAbort("MCI data write");
+					}
+					if (dataTransfer == DATA_XFER_SINGLE_BLOCK)
+						dataTransfer = DATA_XFER_NONE;
+				}
+#if 0
 				if (trcmd == 1) {
 					if (trdir) {
 						uint32_t bytesReqd = std::min(dmaRcvCount << 2, blklen);
@@ -2111,6 +2178,7 @@ private:
 				} else if (trcmd == 2) {
 					core().dumpAndAbort("MCI stop data transfer");
 				}
+#endif
 			}
 		}
 		void setCard(MMCCard& card) {
@@ -2136,6 +2204,7 @@ private:
 		uint32_t dmaRcvAddr, dmaTrxAddr;
 		uint32_t dmaRcvCount, dmaTrxCount;
 		bool dmaRcvEnabled, dmaTrxEnabled;
+		DataTransfer dataTransfer;
 		std::mutex mmcMutex;
 		std::condition_variable mmcSignal;
 		std::thread mmcThread;
