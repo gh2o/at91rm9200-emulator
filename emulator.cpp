@@ -1,9 +1,3 @@
-#define COMPILE_SCRIPT /*
-	set -- -O2 -ggdb -std=c++11 -pthread -Wall
-	g++ "$0" -o "${0%.*}" "$@"
-	exit
-*/
-
 #include <stdarg.h>
 #include <stdint.h>
 #include <assert.h>
