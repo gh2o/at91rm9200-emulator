@@ -472,8 +472,6 @@ public:
 	void tickPendingLDMSTM() {
 		bool errorOccurred = false;
 		auto& st = pendingOperationState.ldm_stm;
-		if (st.special && !st.restoreCPSR)
-			dumpAndAbort("LDM/STM special not implemented");
 		unsigned int Rd;
 		if (st.up)
 			Rd = rightMostBit(st.register_list);
@@ -485,9 +483,16 @@ public:
 				currentTick.tickError = TICK_ERROR_DATA_ABORT;
 				return;
 			}
-			writeRegister(Rd, value);
+			if (st.userRegs)
+				registerFile.writeRegisterUser(Rd, value);
+			else
+				writeRegister(Rd, value);
 		} else {
-			uint32_t value = readRegister(Rd);
+			uint32_t value;
+			if (st.userRegs)
+				value = registerFile.readRegisterUser(Rd);
+			else
+				value = readRegister(Rd);
 			memoryController.writeWord(st.address, value, errorOccurred);
 			if (errorOccurred) {
 				currentTick.tickError = TICK_ERROR_DATA_ABORT;
@@ -792,10 +797,10 @@ public:
 		currentTick.pendingOperation = PENDING_OPERATION_LDM_STM;
 		auto& st = pendingOperationState.ldm_stm;
 		st.load = L;
-		st.special = S;
 		st.up = U;
 		st.writeback = W;
 		st.restoreCPSR = L && S && (register_list & (1 << 15));
+		st.userRegs = S && !st.restoreCPSR;
 		st.Rn = Rn;
 		st.register_list = register_list;
 		uint32_t Rn_value = readRegister(Rn);
@@ -1385,10 +1390,10 @@ private:
 	union {
 		struct {
 			bool load;
-			bool special;
 			bool up;
 			bool writeback;
 			bool restoreCPSR;
+			bool userRegs;
 			unsigned int Rn;
 			uint32_t register_list;
 			uint32_t Rn_final;
