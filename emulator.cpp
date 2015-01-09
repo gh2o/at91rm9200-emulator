@@ -2242,14 +2242,9 @@ private:
 				{
 					// accept next command
 					std::unique_lock<std::mutex> lock(mmcMutex);
-					if (canTransferData()) {
-						// only poll for command
+					while (!canTransferData() && !hasCommand) {
+						mmcSignal.wait(lock);
 						hasCommand = !(statefulStatus & MCI_STATUS_CMDRDY);
-					} else {
-						// wait for next command
-						while (statefulStatus & MCI_STATUS_CMDRDY)
-							mmcSignal.wait(lock);
-						hasCommand = true;
 					}
 					if (hasCommand) {
 						incReq = currentRequest;
