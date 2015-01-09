@@ -2138,7 +2138,7 @@ private:
 					} else if (trcmd == 2) {
 						if (dataTransfer == DATA_XFER_NONE)
 							core().dumpAndAbort("MCI stop but already stopped");
-						core().dumpAndAbort("MCI stop data transfer");
+						dataTransfer = DATA_XFER_NONE;
 					}
 				}
 				if (canTransferData()) {
@@ -2226,6 +2226,7 @@ class EmulatedCard : public AT91RM9200Interface::MMCCard {
 		CSR_CURRENT_STATE_STBY = 3 << 9,
 		CSR_CURRENT_STATE_TRAN = 4 << 9,
 		CSR_CURRENT_STATE_DATA = 5 << 9,
+		CSR_CURRENT_STATE_RCV = 6 << 9,
 	};
 	enum DataCommand {
 		DATA_CMD_NONE,
@@ -2322,6 +2323,17 @@ public:
 				case 9:
 					respondR2_CSD(resp);
 					return true;
+				case 12:
+					switch (getState()) {
+						case CSR_CURRENT_STATE_DATA:
+						case CSR_CURRENT_STATE_RCV:
+							setState(CSR_CURRENT_STATE_TRAN);
+							dataCommand = DATA_CMD_NONE;
+							respondR1b(resp);
+							return true;
+						default:
+							return false;
+					}
 				case 13:
 					dataCommand = oldDataCommand;
 					respondR1(resp);
