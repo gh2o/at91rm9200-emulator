@@ -129,7 +129,15 @@ public:
 					break;
 			}
 		} else if (currentTick.pendingOperation == PENDING_OPERATION_NONE) {
-			currentTick.curPC = registerFile.getProgramCounter();
+			uint32_t nextPC = registerFile.getProgramCounter();
+			if (currentTick.curPC == nextPC) {
+				if (readCPSR() & PSR_BITS_I) {
+					setupTTY(false);
+					std::cerr << "=== System halted. ===" << std::endl;
+					exit(0);
+				}
+			}
+			currentTick.curPC = nextPC;
 			// process interrupts
 			if ((~readCPSR() & PSR_BITS_I) && irqAsserted)
 				prepareInterrupt(0x18, CPU_MODE_IRQ | PSR_BITS_I, currentTick.curPC + 4);
