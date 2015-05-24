@@ -54,7 +54,7 @@
 				reg = <0xffffff00 0x100>;
 			};
 			st: timer@fffffd00 {
-				compatible = "atmel,at91rm9200-st";
+				compatible = "atmel,at91rm9200-st", "syscon";
 				reg = <0xfffffd00 0x100>;
 				interrupts = <1 IRQ_TYPE_LEVEL_HIGH 7>;
 			};
@@ -77,7 +77,7 @@
 				};
 			};
 			dbgu: serial@fffff200 {
-				compatible = "atmel,at91rm9200-usart";
+				compatible = "atmel,at91rm9200-dbgu", "atmel,at91rm9200-usart";
 				reg = <0xfffff200 0x200>;
 				interrupts = <1 IRQ_TYPE_LEVEL_HIGH 7>;
 				clock-names = "usart";
